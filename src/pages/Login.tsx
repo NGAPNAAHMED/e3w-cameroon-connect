@@ -1,18 +1,26 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Shield, User, Briefcase, ChevronRight, AlertCircle } from 'lucide-react';
+import { Shield, User, Briefcase, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+
+const demoCredentials = {
+  admin: { email: 'admin@e3w.cm', password: 'admin123' },
+  gestionnaire: { email: 'ahmed@e3w.cm', password: 'ahmed123' },
+  client: { email: 'client@e3w.cm', password: 'client123' },
+};
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
   const { login, loginAs } = useAuth();
   const navigate = useNavigate();
+  const formRef = useRef<HTMLFormElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,13 +37,42 @@ export default function Login() {
     }
   };
 
-  const handleDemoLogin = (role: 'admin' | 'gestionnaire' | 'client') => {
+  const handleDemoLogin = async (role: 'admin' | 'gestionnaire' | 'client') => {
+    setIsAutoFilling(true);
+    setError('');
+    
+    const creds = demoCredentials[role];
+    
+    // Step 1: Auto-fill email with animation
+    setEmail('');
+    setPassword('');
+    
+    // Animate email typing
+    for (let i = 0; i <= creds.email.length; i++) {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      setEmail(creds.email.substring(0, i));
+    }
+    
+    // Small pause
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Animate password typing
+    for (let i = 0; i <= creds.password.length; i++) {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      setPassword(creds.password.substring(0, i));
+    }
+    
+    // Small pause before auto-submit
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Step 2: Auto-submit
     loginAs(role);
     toast({
       title: "Connexion Demo",
-      description: `Connecté en tant que ${role === 'admin' ? 'Administrateur' : role === 'gestionnaire' ? 'Gestionnaire' : 'Client'}`,
+      description: `Connecté en tant que ${role === 'admin' ? 'Super Admin' : role === 'gestionnaire' ? 'Gestionnaire Ahmed' : 'Client'}`,
     });
     navigate('/dashboard');
+    setIsAutoFilling(false);
   };
 
   return (
@@ -75,7 +112,7 @@ export default function Login() {
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-primary font-display">15B</div>
-              <div className="text-sm text-muted-foreground">XAF en encours</div>
+              <div className="text-sm text-muted-foreground">FCFA en encours</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-primary font-display">99%</div>
@@ -105,7 +142,7 @@ export default function Login() {
             <h2 className="text-2xl font-bold text-foreground mb-2 font-display">Connexion</h2>
             <p className="text-muted-foreground mb-6">Accédez à votre espace sécurisé</p>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-foreground">Email</Label>
                 <Input
@@ -115,6 +152,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input-dark"
+                  disabled={isAutoFilling}
                 />
               </div>
               <div className="space-y-2">
@@ -126,6 +164,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input-dark"
+                  disabled={isAutoFilling}
                 />
               </div>
 
@@ -136,9 +175,18 @@ export default function Login() {
                 </div>
               )}
 
-              <Button type="submit" variant="gold" className="w-full" size="lg">
-                Se connecter
-                <ChevronRight className="w-4 h-4" />
+              <Button type="submit" variant="gold" className="w-full" size="lg" disabled={isAutoFilling}>
+                {isAutoFilling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Connexion en cours...
+                  </>
+                ) : (
+                  <>
+                    Se connecter
+                    <ChevronRight className="w-4 h-4" />
+                  </>
+                )}
               </Button>
             </form>
 
@@ -157,27 +205,39 @@ export default function Login() {
                   variant="outline"
                   className="flex-col h-auto py-4 gap-2"
                   onClick={() => handleDemoLogin('admin')}
+                  disabled={isAutoFilling}
                 >
                   <Shield className="w-5 h-5 text-primary" />
-                  <span className="text-xs">Admin</span>
+                  <span className="text-xs">ADMIN</span>
                 </Button>
                 <Button
                   variant="outline"
                   className="flex-col h-auto py-4 gap-2"
                   onClick={() => handleDemoLogin('gestionnaire')}
+                  disabled={isAutoFilling}
                 >
                   <Briefcase className="w-5 h-5 text-info" />
-                  <span className="text-xs">Gestionnaire</span>
+                  <span className="text-xs">MANAGER AHMED</span>
                 </Button>
                 <Button
                   variant="outline"
                   className="flex-col h-auto py-4 gap-2"
                   onClick={() => handleDemoLogin('client')}
+                  disabled={isAutoFilling}
                 >
                   <User className="w-5 h-5 text-success" />
-                  <span className="text-xs">Client</span>
+                  <span className="text-xs">CLIENT</span>
                 </Button>
               </div>
+            </div>
+
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                Pas encore inscrit ?{' '}
+                <Link to="/register" className="text-primary hover:underline">
+                  Créer un compte
+                </Link>
+              </p>
             </div>
           </div>
 
