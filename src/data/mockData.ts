@@ -22,7 +22,7 @@ export interface Staff {
   role: 'admin' | 'gestionnaire' | 'client';
   avatar: string;
   telephone?: string;
-  charge?: number; // For gestionnaires - number of assigned clients
+  charge?: number;
 }
 
 export interface ClientSalarie {
@@ -38,8 +38,8 @@ export interface ClientSalarie {
   employeurId: string;
   fonction: string;
   revenuNet: number;
-  ancienneteEmploi: number; // months
-  ancienneteBanque: number; // months
+  ancienneteEmploi: number;
+  ancienneteBanque: number;
   personnesCharge: number;
   kycComplete: boolean;
   statut: 'nouveau' | 'en_cours' | 'panier' | 'comite' | 'approuve' | 'rejete';
@@ -67,10 +67,16 @@ export interface ClientIndependant {
   chiffreAffaires: number;
   margeNette: number;
   ancienneteBanque: number;
+  personnesCharge?: number;
   kycComplete: boolean;
   statut: 'nouveau' | 'en_cours' | 'panier' | 'comite' | 'approuve' | 'rejete';
   gestionnaireId?: string;
   adresse?: string;
+  dateNaissance?: string;
+  lieuNaissance?: string;
+  nationalite?: string;
+  cni?: string;
+  situationMatrimoniale?: string;
 }
 
 export interface ClientEntreprise {
@@ -94,6 +100,7 @@ export interface CreditInterne {
   type: string;
   mensualite: number;
   encours: number;
+  impayes: number;
   statut: 'sain' | 'sensible' | 'douteux';
 }
 
@@ -109,12 +116,24 @@ export interface CreditBEAC {
   statut: 'sain' | 'douteux' | 'compromis';
 }
 
-// Companies data - Real Cameroonian companies
+export interface Message {
+  id: string;
+  clientId: string;
+  gestionnaireId: string;
+  type: 'demande_pret' | 'probleme' | 'rdv' | 'autre';
+  sujet: string;
+  contenu: string;
+  reponseAuto?: string;
+  dateEnvoi: Date;
+  lu: boolean;
+}
+
+// Extended Companies data - Real Cameroonian companies
 export const companies: Company[] = [
   { id: 'c1', name: 'MTN Cameroon', sigle: 'MTN', rccm: 'RC/DLA/2000/B/4521', responsable: 'Stephen Blewett', siege: 'Douala, Akwa', secteur: 'Télécommunications', dateCreation: '2000-02-15', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/New-mtn-logo.svg/200px-New-mtn-logo.svg.png', nbEmployes: 1200 },
   { id: 'c2', name: 'Orange Cameroun', sigle: 'ORANGE', rccm: 'RC/DLA/1999/B/3892', responsable: 'Patrick Benon', siege: 'Douala, Bonapriso', secteur: 'Télécommunications', dateCreation: '1999-07-20', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Orange_logo.svg/200px-Orange_logo.svg.png', nbEmployes: 950 },
-  { id: 'c3', name: 'Cameroon Telecommunications', sigle: 'CAMTEL', rccm: 'RC/YDE/1998/B/2145', responsable: 'Judith Yah Sunday', siege: 'Yaoundé, Centre Administratif', secteur: 'Télécommunications', dateCreation: '1998-09-01', logo: 'https://www.camtel.cm/wp-content/uploads/2023/02/logo-camtel.png', nbEmployes: 3500 },
-  { id: 'c4', name: 'Boissons du Cameroun', sigle: 'SABC', rccm: 'RC/DLA/1948/B/0234', responsable: 'Emmanuel de Tailly', siege: 'Douala, Zone Bassa', secteur: 'Agroalimentaire', dateCreation: '1948-05-12', logo: 'https://www.safricas-logistics.com/wp-content/uploads/2019/12/SABC.jpg', nbEmployes: 2800 },
+  { id: 'c3', name: 'Cameroon Telecommunications', sigle: 'CAMTEL', rccm: 'RC/YDE/1998/B/2145', responsable: 'Judith Yah Sunday', siege: 'Yaoundé, Centre Administratif', secteur: 'Télécommunications', dateCreation: '1998-09-01', nbEmployes: 3500 },
+  { id: 'c4', name: 'Boissons du Cameroun', sigle: 'SABC', rccm: 'RC/DLA/1948/B/0234', responsable: 'Emmanuel de Tailly', siege: 'Douala, Zone Bassa', secteur: 'Agroalimentaire', dateCreation: '1948-05-12', nbEmployes: 2800 },
   { id: 'c5', name: 'Afriland First Bank', sigle: 'AFRILAND', rccm: 'RC/YDE/1987/B/1567', responsable: 'Alphonse Nafack', siege: 'Yaoundé, Hippodrome', secteur: 'Banque', dateCreation: '1987-11-15', nbEmployes: 1800 },
   { id: 'c6', name: 'BICEC', sigle: 'BICEC', rccm: 'RC/DLA/1962/B/0892', responsable: 'Pierre Manet', siege: 'Douala, Bonanjo', secteur: 'Banque', dateCreation: '1962-03-22', nbEmployes: 2200 },
   { id: 'c7', name: 'Eneo Cameroun', sigle: 'ENEO', rccm: 'RC/DLA/2014/B/8934', responsable: 'Eric Mansuy', siege: 'Douala, Bonanjo', secteur: 'Énergie', dateCreation: '2014-07-01', nbEmployes: 4500 },
@@ -126,6 +145,22 @@ export const companies: Company[] = [
   { id: 'c13', name: 'CNPS', sigle: 'CNPS', rccm: 'RC/YDE/1969/B/0123', responsable: 'Alain Noël Olivier Mekulu', siege: 'Yaoundé, Centre', secteur: 'Assurance Sociale', dateCreation: '1969-10-01', nbEmployes: 2100 },
   { id: 'c14', name: 'Activa Assurances', sigle: 'ACTIVA', rccm: 'RC/DLA/1998/B/3456', responsable: 'Robert Sobze', siege: 'Douala, Bonanjo', secteur: 'Assurance', dateCreation: '1998-06-12', nbEmployes: 420 },
   { id: 'c15', name: 'Dangote Cement Cameroon', sigle: 'DANGOTE', rccm: 'RC/DLA/2015/B/9012', responsable: 'Babatunde Akinwumi', siege: 'Douala, Kribi', secteur: 'Industrie', dateCreation: '2015-02-28', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/39/Dangote_Industries_logo.png', nbEmployes: 560 },
+  // Additional companies
+  { id: 'c16', name: 'Abbé Nestor Auto-École', sigle: 'ANA', rccm: 'RC/YDE/2010/B/1234', responsable: 'Abbé Nestor', siege: 'Yaoundé, Messa', secteur: 'Formation', dateCreation: '2010-03-15', nbEmployes: 45 },
+  { id: 'c17', name: 'Acajou Palace Hôtel', sigle: 'ACAJOU', rccm: 'RC/DLA/2005/B/5678', responsable: 'Paul Tchouta', siege: 'Douala, Bonanjo', secteur: 'Hôtellerie', dateCreation: '2005-08-20', nbEmployes: 120 },
+  { id: 'c18', name: 'Africa Global Logistics', sigle: 'AGL', rccm: 'RC/DLA/2018/B/9012', responsable: 'Michel Njoh', siege: 'Douala, Port', secteur: 'Logistique', dateCreation: '2018-01-01', nbEmployes: 890 },
+  { id: 'c19', name: 'Agrocam', sigle: 'AGROCAM', rccm: 'RC/YDE/1995/B/3456', responsable: 'Jean Nkodo', siege: 'Yaoundé, Nsimeyong', secteur: 'Agriculture', dateCreation: '1995-06-12', nbEmployes: 350 },
+  { id: 'c20', name: 'Air France Cameroun', sigle: 'AIR FRANCE', rccm: 'RC/DLA/1960/B/0789', responsable: 'François Blanc', siege: 'Douala, Akwa', secteur: 'Transport Aérien', dateCreation: '1960-04-05', nbEmployes: 180 },
+  { id: 'c21', name: 'Allianz Cameroun', sigle: 'ALLIANZ', rccm: 'RC/DLA/2008/B/2345', responsable: 'Klaus Werner', siege: 'Douala, Bonapriso', secteur: 'Assurance', dateCreation: '2008-09-15', nbEmployes: 280 },
+  { id: 'c22', name: 'Alpicam Industries', sigle: 'ALPICAM', rccm: 'RC/DLA/1992/B/6789', responsable: 'Pierre Alpi', siege: 'Douala, Bassa', secteur: 'Industrie Bois', dateCreation: '1992-11-20', nbEmployes: 1500 },
+  { id: 'c23', name: 'Atlantic Bank Cameroun', sigle: 'ABC', rccm: 'RC/DLA/2007/B/0123', responsable: 'Moussa Diallo', siege: 'Douala, Bonanjo', secteur: 'Banque', dateCreation: '2007-03-01', nbEmployes: 450 },
+  { id: 'c24', name: 'Banque Atlantique Cameroun', sigle: 'BACM', rccm: 'RC/DLA/2009/B/4567', responsable: 'Amadou Ba', siege: 'Douala, Akwa', secteur: 'Banque', dateCreation: '2009-06-15', nbEmployes: 380 },
+  { id: 'c25', name: 'BEAC', sigle: 'BEAC', rccm: 'RC/YDE/1972/B/0001', responsable: 'Abbas Mahamat Tolli', siege: 'Yaoundé, Centre', secteur: 'Banque Centrale', dateCreation: '1972-11-22', nbEmployes: 850 },
+  { id: 'c26', name: 'Boulangerie Saker', sigle: 'SAKER', rccm: 'RC/DLA/1985/B/8901', responsable: 'Daniel Saker', siege: 'Douala, Akwa Nord', secteur: 'Agroalimentaire', dateCreation: '1985-02-14', nbEmployes: 200 },
+  { id: 'c27', name: 'Canal 2 International', sigle: 'CANAL2', rccm: 'RC/DLA/1995/B/2345', responsable: 'Samuel Minkeng', siege: 'Douala, Bonanjo', secteur: 'Média', dateCreation: '1995-12-01', nbEmployes: 250 },
+  { id: 'c28', name: 'Congelcam', sigle: 'CONGELCAM', rccm: 'RC/DLA/1976/B/6789', responsable: 'Jean-Pierre Amougou', siege: 'Douala, Port', secteur: 'Agroalimentaire', dateCreation: '1976-08-10', nbEmployes: 1200 },
+  { id: 'c29', name: 'Hôtel Sawa', sigle: 'SAWA', rccm: 'RC/DLA/1980/B/0123', responsable: 'Marie Ebongue', siege: 'Douala, Bonanjo', secteur: 'Hôtellerie', dateCreation: '1980-05-25', nbEmployes: 180 },
+  { id: 'c30', name: 'UBA Cameroun', sigle: 'UBA', rccm: 'RC/DLA/2007/B/4567', responsable: 'Isong Uyo', siege: 'Douala, Akwa', secteur: 'Banque', dateCreation: '2007-08-01', nbEmployes: 520 },
 ];
 
 // Staff data
@@ -144,7 +179,7 @@ const noms = ['Ekedi', 'Abena', 'Tchinda', 'Fotso', 'Kamga', 'Ndjock', 'Mbarga',
 const activites = ['Commerce Général', 'Import-Export', 'Restauration', 'Transport', 'Agriculture', 'Conseil', 'Formation', 'BTP', 'Artisanat', 'Services Numériques'];
 const fonctions = ['Comptable', 'Ingénieur', 'Technicien', 'Commercial', 'Manager', 'Directeur', 'Analyste', 'Chef de Projet', 'Assistant', 'Responsable RH'];
 
-// Avatar URLs - realistic African faces
+// Avatar URLs
 const avatarsHommes = [
   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
   'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face',
@@ -170,15 +205,15 @@ function randomElement<T>(arr: T[]): T {
 }
 
 function generateClients(): Client[] {
-  const clients: Client[] = [];
+  const clientsList: Client[] = [];
   
-  // Generate 50 salaried clients
+  // Generate salaried clients
   for (let i = 0; i < 50; i++) {
     const sexe = Math.random() > 0.4 ? 'M' : 'F';
     const prenom = sexe === 'M' ? randomElement(prenomsHommes) : randomElement(prenomsFemmes);
     const avatar = sexe === 'M' ? randomElement(avatarsHommes) : randomElement(avatarsFemmes);
     
-    clients.push({
+    clientsList.push({
       id: `sal_${i + 1}`,
       type: 'salarie',
       nom: randomElement(noms),
@@ -200,16 +235,22 @@ function generateClients(): Client[] {
       adresse: `${randomElement(['Bastos', 'Essos', 'Mvan', 'Biyem-Assi', 'Akwa', 'Bonapriso', 'Deido', 'Bonamoussadi'])}, ${randomElement(['Yaoundé', 'Douala'])}`,
       nationalite: 'Camerounaise',
       situationMatrimoniale: randomElement(['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf(ve)']),
+      dateNaissance: `${1970 + Math.floor(Math.random() * 30)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
+      lieuNaissance: randomElement(['Yaoundé', 'Douala', 'Bafoussam', 'Bamenda', 'Garoua']),
+      cni: `${Math.floor(Math.random() * 900000000 + 100000000)}`,
     });
   }
   
-  // Generate 30 independent clients
+  // Generate independent clients - Some WITHOUT KYC complete
   for (let i = 0; i < 30; i++) {
     const sexe = Math.random() > 0.35 ? 'M' : 'F';
     const prenom = sexe === 'M' ? randomElement(prenomsHommes) : randomElement(prenomsFemmes);
     const avatar = sexe === 'M' ? randomElement(avatarsHommes) : randomElement(avatarsFemmes);
     
-    clients.push({
+    // First 10 independants have NO KYC
+    const hasKyc = i >= 10 ? Math.random() > 0.3 : false;
+    
+    clientsList.push({
       id: `ind_${i + 1}`,
       type: 'independant',
       nom: randomElement(noms),
@@ -224,17 +265,23 @@ function generateClients(): Client[] {
       chiffreAffaires: Math.floor(Math.random() * 80000000 + 5000000),
       margeNette: Math.floor(Math.random() * 20 + 5),
       ancienneteBanque: Math.floor(Math.random() * 96 + 6),
-      kycComplete: Math.random() > 0.4,
+      personnesCharge: Math.floor(Math.random() * 5),
+      kycComplete: hasKyc,
       statut: randomElement(['nouveau', 'en_cours', 'panier'] as const),
       gestionnaireId: Math.random() > 0.25 ? randomElement(['s2', 's3', 's4']) : undefined,
-      adresse: `${randomElement(['Marché Central', 'Mokolo', 'Mboppi', 'Nkoldongo', 'Briqueterie'])}, ${randomElement(['Yaoundé', 'Douala'])}`,
+      adresse: hasKyc ? `${randomElement(['Marché Central', 'Mokolo', 'Mboppi', 'Nkoldongo', 'Briqueterie'])}, ${randomElement(['Yaoundé', 'Douala'])}` : undefined,
+      dateNaissance: hasKyc ? `${1975 + Math.floor(Math.random() * 25)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}` : undefined,
+      lieuNaissance: hasKyc ? randomElement(['Yaoundé', 'Douala', 'Bafoussam']) : undefined,
+      nationalite: 'Camerounaise',
+      cni: hasKyc ? `${Math.floor(Math.random() * 900000000 + 100000000)}` : undefined,
+      situationMatrimoniale: hasKyc ? randomElement(['Célibataire', 'Marié(e)']) : undefined,
     });
   }
   
-  // Generate 15 enterprise clients
+  // Generate enterprise clients
   for (let i = 0; i < 15; i++) {
     const company = companies[i % companies.length];
-    clients.push({
+    clientsList.push({
       id: `ent_${i + 1}`,
       type: 'entreprise',
       companyId: company.id,
@@ -246,12 +293,12 @@ function generateClients(): Client[] {
     });
   }
   
-  return clients;
+  return clientsList;
 }
 
 export const clients = generateClients();
 
-// Generate credit history
+// Generate credit history with impayes
 export function generateCreditsInterne(clientId: string): CreditInterne[] {
   const count = Math.floor(Math.random() * 3);
   const credits: CreditInterne[] = [];
@@ -259,6 +306,7 @@ export function generateCreditsInterne(clientId: string): CreditInterne[] {
   for (let i = 0; i < count; i++) {
     const montant = Math.floor(Math.random() * 15000000 + 500000);
     const encours = Math.floor(montant * (Math.random() * 0.7 + 0.1));
+    const impayes = Math.random() > 0.7 ? Math.floor(Math.random() * 500000) : 0;
     credits.push({
       id: `ci_${clientId}_${i}`,
       clientId,
@@ -267,7 +315,8 @@ export function generateCreditsInterne(clientId: string): CreditInterne[] {
       type: randomElement(['Crédit Scolaire', 'Crédit Conso', 'Crédit Auto', 'Crédit Immobilier']),
       mensualite: Math.floor(montant / (Math.random() * 36 + 12)),
       encours,
-      statut: encours < montant * 0.3 ? 'sain' : (Math.random() > 0.7 ? 'douteux' : 'sensible'),
+      impayes,
+      statut: impayes > 0 ? 'douteux' : (encours < montant * 0.3 ? 'sain' : 'sensible'),
     });
   }
   
@@ -275,9 +324,9 @@ export function generateCreditsInterne(clientId: string): CreditInterne[] {
 }
 
 export function generateCreditsBEAC(clientId: string): CreditBEAC[] {
-  const count = Math.floor(Math.random() * 2);
+  const count = Math.floor(Math.random() * 3);
   const credits: CreditBEAC[] = [];
-  const banques = ['UBA', 'SCB', 'SGBC', 'Ecobank', 'Standard Chartered'];
+  const banques = ['UBA', 'SCB', 'SGBC', 'Ecobank', 'Standard Chartered', 'Afriland', 'BICEC', 'Banque Atlantique'];
   
   for (let i = 0; i < count; i++) {
     const montant = Math.floor(Math.random() * 25000000 + 1000000);
@@ -301,12 +350,12 @@ export function generateCreditsBEAC(clientId: string): CreditBEAC[] {
 }
 
 export const typesCredit = [
-  { id: 'scolaire', label: 'Crédit Scolaire', taux: 8.5 },
-  { id: 'conso', label: 'Crédit Consommation', taux: 12.0 },
-  { id: 'auto', label: 'Crédit Auto', taux: 10.5 },
-  { id: 'immo', label: 'Crédit Immobilier', taux: 7.5 },
-  { id: 'equipement', label: 'Crédit Équipement', taux: 9.0 },
-  { id: 'tresorerie', label: 'Crédit Trésorerie', taux: 14.0 },
+  { id: 'scolaire', label: 'Crédit Scolaire', taux: 8.5, actif: true },
+  { id: 'conso', label: 'Crédit Consommation', taux: 12.0, actif: true },
+  { id: 'auto', label: 'Crédit Auto', taux: 10.5, actif: true },
+  { id: 'immo', label: 'Crédit Immobilier', taux: 7.5, actif: true },
+  { id: 'equipement', label: 'Crédit Équipement', taux: 9.0, actif: true },
+  { id: 'tresorerie', label: 'Crédit Trésorerie', taux: 14.0, actif: false },
 ];
 
 export const typesGarantie = [
@@ -315,3 +364,24 @@ export const typesGarantie = [
   { id: 'vehicule', label: 'Garantie Réelle - Véhicule' },
   { id: 'nantissement', label: 'Nantissement' },
 ];
+
+// Pre-defined messages for client contact
+export const messagesPredefinis = {
+  demande_pret: [
+    { sujet: 'Demande de crédit scolaire', contenu: 'Je souhaite obtenir un crédit pour financer la scolarité de mes enfants.', reponseAuto: 'Votre demande de crédit scolaire a bien été reçue. Un gestionnaire vous contactera dans les 24h.' },
+    { sujet: 'Demande de crédit consommation', contenu: 'Je souhaite obtenir un crédit consommation pour un projet personnel.', reponseAuto: 'Votre demande de crédit consommation a bien été enregistrée. Merci de compléter votre dossier KYC si ce n\'est pas fait.' },
+    { sujet: 'Demande de crédit immobilier', contenu: 'Je souhaite obtenir un financement pour l\'achat d\'un bien immobilier.', reponseAuto: 'Votre demande de crédit immobilier nécessite une étude approfondie. Un conseiller spécialisé vous contactera.' },
+  ],
+  probleme: [
+    { sujet: 'Problème de remboursement', contenu: 'Je rencontre des difficultés pour honorer mes échéances ce mois-ci.', reponseAuto: 'Nous avons bien reçu votre signalement. Un gestionnaire vous contactera pour étudier les solutions possibles.' },
+    { sujet: 'Erreur sur mon compte', contenu: 'J\'ai constaté une erreur sur le solde de mon compte.', reponseAuto: 'Votre réclamation a été enregistrée. Notre équipe vérifiera et vous tiendra informé sous 48h.' },
+    { sujet: 'Demande de relevé', contenu: 'Je souhaite obtenir un relevé détaillé de mon compte.', reponseAuto: 'Votre demande de relevé sera traitée dans les meilleurs délais.' },
+  ],
+  rdv: [
+    { sujet: 'Demande de rendez-vous', contenu: 'Je souhaite prendre rendez-vous pour discuter de mon dossier.', reponseAuto: 'Votre demande de RDV a été transmise. Vous recevrez une proposition de créneau par SMS.' },
+    { sujet: 'Modification de rendez-vous', contenu: 'Je souhaite reporter mon rendez-vous prévu.', reponseAuto: 'Votre demande de modification a été prise en compte.' },
+  ],
+};
+
+// Messages storage
+export const messagesClients: Message[] = [];

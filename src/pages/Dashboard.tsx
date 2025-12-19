@@ -7,7 +7,7 @@ import AdminDashboard from './dashboard/AdminDashboard';
 import ClientDashboard from './dashboard/ClientDashboard';
 import ClientKYCForm from './client/ClientKYCForm';
 import ClientSimulation from './client/ClientSimulation';
-import ClientGestionnaire from './client/ClientGestionnaire';
+import ClientContact from './client/ClientContact';
 import AdminNouveaux from './admin/AdminNouveaux';
 import AdminGestionnaires from './admin/AdminGestionnaires';
 import AdminComite from './admin/AdminComite';
@@ -39,8 +39,7 @@ export default function Dashboard() {
         {/* Client Routes */}
         <Route path="dossier" element={<ClientKYCForm />} />
         <Route path="simulation" element={<ClientSimulation />} />
-        <Route path="gestionnaire" element={<ClientGestionnaire />} />
-        <Route path="demandes" element={<DemandesPage />} />
+        <Route path="contact" element={<ClientContact />} />
         
         {/* Manager Routes */}
         <Route path="portefeuille" element={<GestionnaireDashboard />} />
@@ -52,7 +51,6 @@ export default function Dashboard() {
         {/* Admin Routes */}
         <Route path="nouveaux" element={<AdminNouveaux />} />
         <Route path="gestionnaires" element={<AdminGestionnaires />} />
-        <Route path="reassignations" element={<AdminGestionnaires />} />
         <Route path="comite" element={<AdminComite />} />
         <Route path="parametres" element={<AdminParametres />} />
         
@@ -63,21 +61,11 @@ export default function Dashboard() {
   );
 }
 
-// Placeholder pages
 function DossiersPage() {
   return (
     <div className="animate-fade-in">
       <h1 className="text-2xl font-bold font-display mb-4">Mes Dossiers</h1>
       <p className="text-muted-foreground">Historique de vos dossiers traités</p>
-    </div>
-  );
-}
-
-function DemandesPage() {
-  return (
-    <div className="animate-fade-in">
-      <h1 className="text-2xl font-bold font-display mb-4">Mes Demandes</h1>
-      <p className="text-muted-foreground">Suivi de vos demandes de crédit</p>
     </div>
   );
 }
