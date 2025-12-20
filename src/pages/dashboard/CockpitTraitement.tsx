@@ -8,14 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
+import { useNotifications } from '@/contexts/NotificationContext';
 import {
   ArrowLeft,
   Building2,
-  Phone,
-  Mail,
-  MapPin,
-  Calendar,
   Users,
   Briefcase,
   Eye,
@@ -30,38 +28,228 @@ import {
   CreditCard,
   Shield,
   Upload,
+  Landmark,
+  AlertCircle,
 } from 'lucide-react';
-import { clients, companies, typesCredit, typesGarantie, generateCreditsInterne, generateCreditsBEAC, ClientSalarie, ClientIndependant, ClientEntreprise } from '@/data/mockData';
+import { clients, companies, typesCredit, typesGarantie, generateCreditsInterne, generateCreditsBEAC, ClientSalarie, ClientIndependant, ClientEntreprise, Client } from '@/data/mockData';
 import { formatXAF, formatDuree, formatPourcentage, calculerMensualite, calculerCoutTotal, getInitials, formatDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
+
+// KYC Form Component for clients without KYC
+function KYCFormDialog({ client, onComplete }: { client: Client; onComplete: () => void }) {
+  const [formData, setFormData] = useState({
+    nom: (client as any).nom || '',
+    prenom: (client as any).prenom || '',
+    dateNaissance: '',
+    lieuNaissance: '',
+    sexe: (client as any).sexe || 'M',
+    nationalite: 'Camerounaise',
+    cni: '',
+    cniDelivrance: '',
+    cniExpiration: '',
+    adresse: '',
+    ville: '',
+    telephone: (client as any).telephone || '',
+    email: (client as any).email || '',
+    situationMatrimoniale: '',
+    personnesCharge: 0,
+    typeLogement: '',
+    niveauInstruction: '',
+    // Professionnel
+    activite: (client as any).activite || '',
+    ancienneteActivite: '',
+    caMensuel: '',
+    marge: '',
+    charges: '',
+  });
+
+  const handleSave = () => {
+    toast({
+      title: "Dossier créé",
+      description: "La fiche KYC a été créée avec succès",
+    });
+    onComplete();
+  };
+
+  return (
+    <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+      {/* Bloc 1: Identification */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-primary flex items-center gap-2">
+          <FileText className="w-4 h-4" />
+          1. Identification
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs">Nom</Label>
+            <Input value={formData.nom} onChange={e => setFormData({...formData, nom: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Prénom</Label>
+            <Input value={formData.prenom} onChange={e => setFormData({...formData, prenom: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Date de naissance</Label>
+            <Input type="date" value={formData.dateNaissance} onChange={e => setFormData({...formData, dateNaissance: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Lieu de naissance</Label>
+            <Input value={formData.lieuNaissance} onChange={e => setFormData({...formData, lieuNaissance: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Sexe</Label>
+            <Select value={formData.sexe} onValueChange={v => setFormData({...formData, sexe: v})}>
+              <SelectTrigger className="input-dark h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="M">Masculin</SelectItem>
+                <SelectItem value="F">Féminin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Nationalité</Label>
+            <Input value={formData.nationalite} onChange={e => setFormData({...formData, nationalite: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">N° CNI</Label>
+            <Input value={formData.cni} onChange={e => setFormData({...formData, cni: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Adresse</Label>
+            <Input value={formData.adresse} onChange={e => setFormData({...formData, adresse: e.target.value})} className="input-dark h-9" />
+          </div>
+        </div>
+      </div>
+
+      {/* Bloc 2: Situation Sociale */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-primary flex items-center gap-2">
+          <Users className="w-4 h-4" />
+          2. Situation Familiale
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs">Situation matrimoniale</Label>
+            <Select value={formData.situationMatrimoniale} onValueChange={v => setFormData({...formData, situationMatrimoniale: v})}>
+              <SelectTrigger className="input-dark h-9"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="celibataire">Célibataire</SelectItem>
+                <SelectItem value="marie">Marié(e)</SelectItem>
+                <SelectItem value="divorce">Divorcé(e)</SelectItem>
+                <SelectItem value="veuf">Veuf(ve)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Personnes à charge</Label>
+            <Input type="number" value={formData.personnesCharge} onChange={e => setFormData({...formData, personnesCharge: parseInt(e.target.value) || 0})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Type de logement</Label>
+            <Select value={formData.typeLogement} onValueChange={v => setFormData({...formData, typeLogement: v})}>
+              <SelectTrigger className="input-dark h-9"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="proprietaire">Propriétaire</SelectItem>
+                <SelectItem value="locataire">Locataire</SelectItem>
+                <SelectItem value="familial">Logement familial</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Niveau d'instruction</Label>
+            <Select value={formData.niveauInstruction} onValueChange={v => setFormData({...formData, niveauInstruction: v})}>
+              <SelectTrigger className="input-dark h-9"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="primaire">Primaire</SelectItem>
+                <SelectItem value="secondaire">Secondaire</SelectItem>
+                <SelectItem value="superieur">Supérieur</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Bloc 3: Situation Professionnelle */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-primary flex items-center gap-2">
+          <Briefcase className="w-4 h-4" />
+          3. Situation Professionnelle
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs">Activité principale</Label>
+            <Input value={formData.activite} onChange={e => setFormData({...formData, activite: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Ancienneté activité (mois)</Label>
+            <Input type="number" value={formData.ancienneteActivite} onChange={e => setFormData({...formData, ancienneteActivite: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">CA Mensuel (FCFA)</Label>
+            <Input value={formData.caMensuel} onChange={e => setFormData({...formData, caMensuel: e.target.value})} className="input-dark h-9" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Marge (%)</Label>
+            <Input value={formData.marge} onChange={e => setFormData({...formData, marge: e.target.value})} className="input-dark h-9" />
+          </div>
+        </div>
+        <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
+          <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Documents: Patente, Relevés bancaires</p>
+        </div>
+      </div>
+
+      {/* Bloc 4: Informations Bancaires */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-primary flex items-center gap-2">
+          <Landmark className="w-4 h-4" />
+          4. Informations Bancaires
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2 col-span-2">
+            <Label className="text-xs">Autres comptes bancaires</Label>
+            <Input placeholder="Ex: BICEC, UBA..." className="input-dark h-9" />
+          </div>
+        </div>
+      </div>
+
+      <Button variant="gold" className="w-full" onClick={handleSave}>
+        <CheckCircle2 className="w-4 h-4 mr-2" />
+        Valider la fiche KYC
+      </Button>
+    </div>
+  );
+}
 
 export default function CockpitTraitement() {
   const { clientId } = useParams();
   const navigate = useNavigate();
+  const { addNotification } = useNotifications();
   
   const client = clients.find(c => c.id === clientId);
   const [showGaranties, setShowGaranties] = useState(false);
+  const [showKycDialog, setShowKycDialog] = useState(false);
+  const [kycCompleted, setKycCompleted] = useState(client?.kycComplete || false);
   
   // Credit form state
   const [creditForm, setCreditForm] = useState({
     typeCredit: '',
     montant: '',
+    periodicite: 'mois',
     duree: '24',
+    differePeriodicite: 'mois',
     differe: '0',
   });
 
   // Garantie form state
   const [garantieForm, setGarantieForm] = useState({
     type: '',
-    // Personnelle
     nomCaution: '',
     cniCaution: '',
     revenuCaution: '',
-    // Immobilier
     localisation: '',
     titreFoncier: '',
     valeurBien: '',
-    // Véhicule
     marque: '',
     chassis: '',
   });
@@ -86,25 +274,36 @@ export default function CockpitTraitement() {
 
   const selectedCredit = typesCredit.find(t => t.id === creditForm.typeCredit);
   const montant = parseInt(creditForm.montant.replace(/\s/g, '')) || 0;
+  const dureeEnMois = creditForm.periodicite === 'semaines' 
+    ? Math.ceil(parseInt(creditForm.duree) / 4) 
+    : parseInt(creditForm.duree);
+  const differeEnMois = creditForm.differePeriodicite === 'semaines'
+    ? Math.ceil(parseInt(creditForm.differe) / 4)
+    : parseInt(creditForm.differe);
+  
   const mensualite = selectedCredit ? calculerMensualite(
     montant,
     selectedCredit.taux,
-    parseInt(creditForm.duree),
-    parseInt(creditForm.differe)
+    dureeEnMois,
+    differeEnMois
   ) : 0;
-  const coutTotal = calculerCoutTotal(mensualite, parseInt(creditForm.duree), parseInt(creditForm.differe));
+  const coutTotal = calculerCoutTotal(mensualite, dureeEnMois, differeEnMois);
 
-  // Calculate internal risks
-  const totalEncours = creditsInterne.reduce((sum, c) => sum + c.encours, 0);
+  // Calculate risks - same data for both sections
+  const totalCredits = creditsInterne.length;
   const totalMontant = creditsInterne.reduce((sum, c) => sum + c.montantInitial, 0);
+  const totalEncours = creditsInterne.reduce((sum, c) => sum + c.encours, 0);
+  const totalImpayes = creditsInterne.reduce((sum, c) => sum + c.impayes, 0);
+  const scoreInterne = totalImpayes === 0 ? 'A' : totalImpayes < 500000 ? 'B' : 'C';
 
-  // Calculate BEAC risks
-  const totalBEAC = creditsBEAC.reduce((sum, c) => sum + c.soldeRestant, 0);
-  const totalImpayes = creditsBEAC.reduce((sum, c) => sum + c.impayes, 0);
-  const scoreBEAC = creditsBEAC.length > 0 ? (totalImpayes === 0 ? 'A' : totalImpayes < 1000000 ? 'B' : 'C') : 'N/A';
+  // BEAC data
+  const totalCreditsBEAC = creditsBEAC.length;
+  const totalMontantBEAC = creditsBEAC.reduce((sum, c) => sum + c.montantInitial, 0);
+  const totalEncoursBEAC = creditsBEAC.reduce((sum, c) => sum + c.soldeRestant, 0);
+  const totalImpayesBEAC = creditsBEAC.reduce((sum, c) => sum + c.impayes, 0);
+  const scoreBEAC = totalImpayesBEAC === 0 ? 'A' : totalImpayesBEAC < 1000000 ? 'B' : 'C';
 
   const handleMontantChange = (value: string) => {
-    // Format with spaces
     const numericValue = value.replace(/\s/g, '').replace(/\D/g, '');
     const formatted = numericValue.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     setCreditForm(prev => ({ ...prev, montant: formatted }));
@@ -123,125 +322,286 @@ export default function CockpitTraitement() {
   };
 
   const handleEnregistrer = () => {
+    addNotification({
+      title: "Dossier enregistré",
+      message: `Le dossier a été ajouté au panier`,
+      type: "success",
+      link: "/dashboard/panier"
+    });
     toast({
       title: "Dossier enregistré",
       description: "Le dossier a été ajouté au panier",
     });
+    // Reset form
+    setCreditForm({ typeCredit: '', montant: '', periodicite: 'mois', duree: '24', differePeriodicite: 'mois', differe: '0' });
+    setGarantieForm({ type: '', nomCaution: '', cniCaution: '', revenuCaution: '', localisation: '', titreFoncier: '', valeurBien: '', marque: '', chassis: '' });
+    setShowGaranties(false);
   };
 
-  const handleTransmettre = () => {
+  const handleTelechargerPDF = () => {
     toast({
-      title: "Dossier transmis",
-      description: "Le dossier a été transmis au comité",
+      title: "PDF généré",
+      description: "Le téléchargement va commencer",
     });
-    navigate('/dashboard/panier');
   };
+
+  const getClientName = () => {
+    if (client.type !== 'entreprise') {
+      return `${(client as any).prenom} ${(client as any).nom}`;
+    }
+    const company = companies.find(c => c.id === (client as ClientEntreprise).companyId);
+    return company?.name || 'Entreprise';
+  };
+
+  // Check if client needs KYC
+  const needsKyc = !kycCompleted && client.type === 'independant';
 
   return (
-    <div className="h-[calc(100vh-7rem)] flex flex-col animate-fade-in">
+    <div className="h-[calc(100vh-7rem)] flex flex-col animate-fade-in overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-4">
+      <div className="flex items-center gap-4 mb-3 flex-shrink-0">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-xl font-bold font-display">Cockpit de Traitement</h1>
-        <Badge variant="outline" className="ml-auto">
+        <h1 className="text-lg font-bold font-display">Cockpit de Traitement</h1>
+        <Badge variant="outline" className="ml-2">
           {client.type === 'salarie' ? 'Salarié' : client.type === 'independant' ? 'Indépendant' : 'Entreprise'}
         </Badge>
+        {kycCompleted && <CheckCircle2 className="w-5 h-5 text-info" />}
+        <span className="text-sm text-muted-foreground ml-auto">{getClientName()}</span>
       </div>
 
-      {/* Main Grid - No Scroll Layout */}
-      <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
-        {/* Zone A - Client Info (Top Left) */}
-        <div className="col-span-12 lg:col-span-5 row-span-1">
-          <ZoneClientInfo client={client} />
+      {/* KYC Warning */}
+      {needsKyc && (
+        <div className="mb-3 p-3 bg-warning/10 border border-warning/30 rounded-lg flex items-center gap-3 flex-shrink-0">
+          <AlertCircle className="w-5 h-5 text-warning" />
+          <span className="text-sm">Ce client n'a pas encore de fiche KYC complète.</span>
+          <Dialog open={showKycDialog} onOpenChange={setShowKycDialog}>
+            <DialogTrigger asChild>
+              <Button variant="warning" size="sm" className="ml-auto">
+                <FileText className="w-4 h-4 mr-2" />
+                Créer Dossier Client
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Créer le Dossier Client</DialogTitle>
+              </DialogHeader>
+              <KYCFormDialog 
+                client={client} 
+                onComplete={() => {
+                  setKycCompleted(true);
+                  setShowKycDialog(false);
+                }} 
+              />
+            </DialogContent>
+          </Dialog>
         </div>
+      )}
 
-        {/* Zone C - Risks (Top Right) */}
-        <div className="col-span-12 lg:col-span-7 row-span-1">
-          <div className="grid grid-cols-2 gap-4 h-full">
-            {/* Internal Risks */}
-            <ZoneRisquesInternes 
-              credits={creditsInterne}
-              totalEncours={totalEncours}
-              totalMontant={totalMontant}
-            />
-            {/* BEAC Risks */}
-            <ZoneRisquesBEAC 
-              credits={creditsBEAC}
-              totalBEAC={totalBEAC}
-              totalImpayes={totalImpayes}
-              score={scoreBEAC}
-            />
-          </div>
-        </div>
+      {/* Main Grid - NO SCROLL */}
+      <div className="flex-1 grid grid-rows-2 gap-3 min-h-0">
+        {/* Row 1: Zone A (1/3) + Zones B & C (2/3) */}
+        <div className="grid grid-cols-3 gap-3 min-h-0">
+          {/* Zone A - Client Synthèse (1/3 width) */}
+          <Card className="zone-panel overflow-hidden">
+            <div className="zone-title">
+              {client.type === 'salarie' ? <Users className="w-4 h-4" /> : 
+               client.type === 'independant' ? <Briefcase className="w-4 h-4" /> : 
+               <Building2 className="w-4 h-4" />}
+              Synthèse Client
+            </div>
+            <ZoneClientSynthese client={client} />
+          </Card>
 
-        {/* Zone B - Credit Form (Bottom Left) + Zone E - Garanties (Slide in) */}
-        <div className={cn(
-          "col-span-12 row-span-1 transition-all duration-300",
-          showGaranties ? "lg:col-span-5" : "lg:col-span-5"
-        )}>
-          <ZoneCredit 
-            form={creditForm}
-            setForm={setCreditForm}
-            handleMontantChange={handleMontantChange}
-            selectedCredit={selectedCredit}
-            mensualite={mensualite}
-            coutTotal={coutTotal}
-          />
-        </div>
-
-        {/* Zone E - Garanties (appears after SUIVANT) */}
-        {showGaranties && (
-          <div className="col-span-12 lg:col-span-7 row-span-1 animate-slide-in-right">
-            <ZoneGaranties 
-              form={garantieForm}
-              setForm={setGarantieForm}
-            />
-          </div>
-        )}
-
-        {/* Zone D - Actions (Bottom) */}
-        <div className={cn(
-          "col-span-12 flex items-center gap-3",
-          !showGaranties && "lg:col-span-7"
-        )}>
-          {!showGaranties ? (
-            <>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FileText className="w-4 h-4" />
-                <span>Progression: 1/2</span>
+          {/* Zones B & C (2/3 width) */}
+          <div className="col-span-2 grid grid-rows-2 gap-3 min-h-0">
+            {/* Zone B - Banque Interne */}
+            <Card className="zone-panel overflow-hidden">
+              <div className="zone-title">
+                <Landmark className="w-4 h-4" />
+                Engagements Internes (La Banque)
               </div>
-              <div className="flex-1" />
-              <Button variant="outline" onClick={handleEnregistrer}>
-                <Save className="w-4 h-4 mr-2" />
-                Enregistrer
-              </Button>
-              <Button variant="gold" onClick={handleSuivant}>
-                Suivant
-                <ChevronRight className="w-4 h-4 ml-2" />
-              </Button>
-            </>
+              <ZoneRisques 
+                type="interne"
+                nbCredits={totalCredits}
+                montantGlobal={totalMontant}
+                encours={totalEncours}
+                impayes={totalImpayes}
+                score={scoreInterne}
+                credits={creditsInterne}
+              />
+            </Card>
+
+            {/* Zone C - Centrale des Risques */}
+            <Card className="zone-panel overflow-hidden">
+              <div className="zone-title">
+                <AlertTriangle className="w-4 h-4" />
+                Centrale des Risques (BEAC)
+              </div>
+              <ZoneRisques 
+                type="beac"
+                nbCredits={totalCreditsBEAC}
+                montantGlobal={totalMontantBEAC}
+                encours={totalEncoursBEAC}
+                impayes={totalImpayesBEAC}
+                score={scoreBEAC}
+                creditsBEAC={creditsBEAC}
+              />
+            </Card>
+          </div>
+        </div>
+
+        {/* Row 2: Zone D (Credit) / Zone E (Garanties) */}
+        <div className="min-h-0">
+          {!showGaranties ? (
+            /* Zone D - Crédit */
+            <Card className="zone-panel h-full">
+              <div className="zone-title">
+                <CreditCard className="w-4 h-4" />
+                Informations sur le Crédit
+              </div>
+              <div className="flex-1 grid grid-cols-6 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">Type de Crédit</Label>
+                  <Select value={creditForm.typeCredit} onValueChange={(v) => setCreditForm(p => ({...p, typeCredit: v}))}>
+                    <SelectTrigger className="input-dark h-9"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                    <SelectContent>
+                      {typesCredit.map(t => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Montant (FCFA)</Label>
+                  <Input value={creditForm.montant} onChange={(e) => handleMontantChange(e.target.value)} placeholder="0" className="input-dark h-9 number-format" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Périodicité</Label>
+                  <Select value={creditForm.periodicite} onValueChange={(v) => setCreditForm(p => ({...p, periodicite: v}))}>
+                    <SelectTrigger className="input-dark h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mois">Mois</SelectItem>
+                      <SelectItem value="semaines">Semaines</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Durée ({creditForm.periodicite})</Label>
+                  <Input type="number" value={creditForm.duree} onChange={(e) => setCreditForm(p => ({...p, duree: e.target.value}))} className="input-dark h-9" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Différé ({creditForm.differePeriodicite})</Label>
+                  <div className="flex gap-1">
+                    <Select value={creditForm.differePeriodicite} onValueChange={(v) => setCreditForm(p => ({...p, differePeriodicite: v}))}>
+                      <SelectTrigger className="input-dark h-9 w-20"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mois">Mois</SelectItem>
+                        <SelectItem value="semaines">Sem</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input type="number" value={creditForm.differe} onChange={(e) => setCreditForm(p => ({...p, differe: e.target.value}))} className="input-dark h-9 flex-1" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Taux (%)</Label>
+                  <Input value={selectedCredit ? formatPourcentage(selectedCredit.taux) : '-'} readOnly className="input-dark h-9 bg-muted/50" />
+                </div>
+              </div>
+              
+              {/* Résultat */}
+              <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-border">
+                <div className="p-3 rounded-lg bg-muted/50 text-center">
+                  <p className="text-xs text-muted-foreground">Mensualité</p>
+                  <p className="font-bold text-primary number-format">{mensualite ? formatXAF(mensualite) : '-'}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50 text-center">
+                  <p className="text-xs text-muted-foreground">Coût Total</p>
+                  <p className="font-bold number-format">{coutTotal ? formatXAF(coutTotal) : '-'}</p>
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <Button variant="outline" onClick={handleEnregistrer}>
+                    <Save className="w-4 h-4 mr-2" />
+                    Enregistrer
+                  </Button>
+                  <Button variant="gold" onClick={handleSuivant}>
+                    Suivant
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
           ) : (
-            <>
-              <Button variant="ghost" onClick={() => setShowGaranties(false)}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Retour
-              </Button>
-              <div className="flex-1" />
-              <Button variant="outline">
-                <Download className="w-4 h-4 mr-2" />
-                Télécharger PDF
-              </Button>
-              <Button variant="outline" onClick={handleEnregistrer}>
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                Ajouter au Panier
-              </Button>
-              <Button variant="gold" onClick={handleTransmettre}>
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                Transmettre au Comité
-              </Button>
-            </>
+            /* Zone E - Garanties (Animation slide) */
+            <Card className="zone-panel h-full animate-fade-in">
+              <div className="zone-title">
+                <Shield className="w-4 h-4" />
+                Garanties
+              </div>
+              <div className="flex-1 grid grid-cols-2 gap-4">
+                {/* Type de garantie */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Type de Garantie</Label>
+                    <Select value={garantieForm.type} onValueChange={(v) => setGarantieForm(p => ({...p, type: v}))}>
+                      <SelectTrigger className="input-dark"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                      <SelectContent>
+                        {typesGarantie.map(t => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {garantieForm.type === 'personnelle' && (
+                    <div className="space-y-3 animate-fade-in">
+                      <Input placeholder="Nom de la caution" value={garantieForm.nomCaution} onChange={e => setGarantieForm(p => ({...p, nomCaution: e.target.value}))} className="input-dark h-9" />
+                      <Input placeholder="N° CNI Caution" value={garantieForm.cniCaution} onChange={e => setGarantieForm(p => ({...p, cniCaution: e.target.value}))} className="input-dark h-9" />
+                      <Input placeholder="Revenu Caution (FCFA)" value={garantieForm.revenuCaution} onChange={e => setGarantieForm(p => ({...p, revenuCaution: e.target.value}))} className="input-dark h-9" />
+                    </div>
+                  )}
+                  
+                  {garantieForm.type === 'immo' && (
+                    <div className="space-y-3 animate-fade-in">
+                      <Input placeholder="Localisation du bien" value={garantieForm.localisation} onChange={e => setGarantieForm(p => ({...p, localisation: e.target.value}))} className="input-dark h-9" />
+                      <Input placeholder="N° Titre Foncier" value={garantieForm.titreFoncier} onChange={e => setGarantieForm(p => ({...p, titreFoncier: e.target.value}))} className="input-dark h-9" />
+                      <Input placeholder="Valeur du bien (FCFA)" value={garantieForm.valeurBien} onChange={e => setGarantieForm(p => ({...p, valeurBien: e.target.value}))} className="input-dark h-9" />
+                    </div>
+                  )}
+                  
+                  {garantieForm.type === 'vehicule' && (
+                    <div className="space-y-3 animate-fade-in">
+                      <Input placeholder="Marque & Modèle" value={garantieForm.marque} onChange={e => setGarantieForm(p => ({...p, marque: e.target.value}))} className="input-dark h-9" />
+                      <Input placeholder="N° Châssis" value={garantieForm.chassis} onChange={e => setGarantieForm(p => ({...p, chassis: e.target.value}))} className="input-dark h-9" />
+                    </div>
+                  )}
+                </div>
+                
+                {/* Upload documents */}
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground">Documents requis</p>
+                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Glissez vos documents ici</p>
+                    <p className="text-xs text-muted-foreground mt-1">Acte de caution, Titre foncier, Carte grise...</p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Actions */}
+              <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
+                <Button variant="ghost" onClick={() => setShowGaranties(false)}>
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Retour
+                </Button>
+                <div className="flex-1" />
+                <Button variant="outline" onClick={handleTelechargerPDF}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Télécharger PDF
+                </Button>
+                <Button variant="gold" onClick={handleEnregistrer}>
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Enregistrer au Panier
+                </Button>
+              </div>
+            </Card>
           )}
         </div>
       </div>
@@ -249,650 +609,208 @@ export default function CockpitTraitement() {
   );
 }
 
-// Zone A - Client Info Component
-function ZoneClientInfo({ client }: { client: typeof clients[0] }) {
+// Zone Client Synthèse Component
+function ZoneClientSynthese({ client }: { client: Client }) {
   if (client.type === 'salarie') {
     const salarie = client as ClientSalarie;
     const employeur = companies.find(c => c.id === salarie.employeurId);
     
     return (
-      <Card className="zone-panel">
-        <div className="zone-title">
-          <Users className="w-4 h-4" />
-          Informations Client - Salarié
+      <div className="flex gap-3 flex-1 min-h-0">
+        <Avatar className="w-16 h-16 border-2 border-primary/30 flex-shrink-0">
+          <AvatarImage src={salarie.avatar} />
+          <AvatarFallback className="bg-primary/20 text-primary">{getInitials(salarie.nom, salarie.prenom)}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs overflow-hidden">
+          <div><span className="text-muted-foreground">Nom:</span> <span className="font-medium">{salarie.nom}</span></div>
+          <div><span className="text-muted-foreground">Prénom:</span> <span className="font-medium">{salarie.prenom}</span></div>
+          <div><span className="text-muted-foreground">Âge:</span> <span className="font-medium">{salarie.age} ans</span></div>
+          <div><span className="text-muted-foreground">Sexe:</span> <span className="font-medium">{salarie.sexe === 'M' ? 'M' : 'F'}</span></div>
+          <div className="flex items-center gap-1"><span className="text-muted-foreground">Employeur:</span> {employeur?.logo && <img src={employeur.logo} className="w-3 h-3" />}<span className="font-medium">{employeur?.sigle}</span></div>
+          <div><span className="text-muted-foreground">Fonction:</span> <span className="font-medium">{salarie.fonction}</span></div>
+          <div><span className="text-muted-foreground">Revenu:</span> <span className="font-medium text-primary">{formatXAF(salarie.revenuNet)}</span></div>
+          <div><span className="text-muted-foreground">Anc. Banque:</span> <span className="font-medium">{formatDuree(salarie.ancienneteBanque)}</span></div>
+          <div><span className="text-muted-foreground">Anc. Emploi:</span> <span className="font-medium">{formatDuree(salarie.ancienneteEmploi)}</span></div>
+          <div><span className="text-muted-foreground">Pers. charge:</span> <span className="font-medium">{salarie.personnesCharge}</span></div>
+          <div className="col-span-2"><span className="text-muted-foreground">Tél:</span> <span className="font-medium">{salarie.telephone}</span></div>
         </div>
-        <div className="flex gap-4">
-          <Avatar className="w-20 h-20 border-2 border-primary/30">
-            <AvatarImage src={salarie.avatar} />
-            <AvatarFallback className="bg-primary/20 text-primary text-xl">
-              {getInitials(salarie.nom, salarie.prenom)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 grid grid-cols-3 gap-x-4 gap-y-2">
-            <div>
-              <p className="data-label">Nom</p>
-              <p className="data-value">{salarie.nom}</p>
-            </div>
-            <div>
-              <p className="data-label">Prénom</p>
-              <p className="data-value">{salarie.prenom}</p>
-            </div>
-            <div>
-              <p className="data-label">Âge</p>
-              <p className="data-value">{salarie.age} ans</p>
-            </div>
-            <div>
-              <p className="data-label">Employeur</p>
-              <div className="flex items-center gap-1">
-                {employeur?.logo && <img src={employeur.logo} alt="" className="w-4 h-4 object-contain" />}
-                <p className="data-value">{employeur?.sigle}</p>
-              </div>
-            </div>
-            <div>
-              <p className="data-label">Fonction</p>
-              <p className="data-value">{salarie.fonction}</p>
-            </div>
-            <div>
-              <p className="data-label">Sexe</p>
-              <p className="data-value">{salarie.sexe === 'M' ? 'Masculin' : 'Féminin'}</p>
-            </div>
-            <div>
-              <p className="data-label">Revenu Net</p>
-              <p className="data-value text-primary font-semibold number-format">{formatXAF(salarie.revenuNet)}</p>
-            </div>
-            <div>
-              <p className="data-label">Ancienneté Banque</p>
-              <p className="data-value">{formatDuree(salarie.ancienneteBanque)}</p>
-            </div>
-            <div>
-              <p className="data-label">Pers. à charge</p>
-              <p className="data-value">{salarie.personnesCharge}</p>
-            </div>
-            <div>
-              <p className="data-label">Anc. Employeur</p>
-              <p className="data-value">{formatDuree(salarie.ancienneteEmploi)}</p>
-            </div>
-            <div className="col-span-2">
-              <p className="data-label">Téléphone</p>
-              <p className="data-value">{salarie.telephone}</p>
-            </div>
-          </div>
-        </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="mt-3 w-full">
-              <Eye className="w-4 h-4 mr-2" />
-              Voir Plus (Fiche KYC)
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Fiche KYC Complète</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="space-y-3">
-                <h4 className="font-semibold text-sm text-muted-foreground">IDENTITÉ</h4>
-                <div><span className="text-muted-foreground text-sm">CNI:</span> <span className="font-medium">{salarie.cni || 'N/A'}</span></div>
-                <div><span className="text-muted-foreground text-sm">Nationalité:</span> <span className="font-medium">{salarie.nationalite}</span></div>
-                <div><span className="text-muted-foreground text-sm">Lieu de naissance:</span> <span className="font-medium">{salarie.lieuNaissance || 'N/A'}</span></div>
-              </div>
-              <div className="space-y-3">
-                <h4 className="font-semibold text-sm text-muted-foreground">ÉTAT CIVIL</h4>
-                <div><span className="text-muted-foreground text-sm">Situation:</span> <span className="font-medium">{salarie.situationMatrimoniale}</span></div>
-                <div><span className="text-muted-foreground text-sm">Personnes à charge:</span> <span className="font-medium">{salarie.personnesCharge}</span></div>
-              </div>
-              <div className="space-y-3">
-                <h4 className="font-semibold text-sm text-muted-foreground">EMPLOI</h4>
-                <div><span className="text-muted-foreground text-sm">Employeur:</span> <span className="font-medium">{employeur?.name}</span></div>
-                <div><span className="text-muted-foreground text-sm">Fonction:</span> <span className="font-medium">{salarie.fonction}</span></div>
-                <div><span className="text-muted-foreground text-sm">Ancienneté:</span> <span className="font-medium">{formatDuree(salarie.ancienneteEmploi)}</span></div>
-              </div>
-              <div className="space-y-3">
-                <h4 className="font-semibold text-sm text-muted-foreground">ADRESSE</h4>
-                <div><span className="text-muted-foreground text-sm">Domicile:</span> <span className="font-medium">{salarie.adresse}</span></div>
-                <div><span className="text-muted-foreground text-sm">Email:</span> <span className="font-medium">{salarie.email}</span></div>
-                <div><span className="text-muted-foreground text-sm">Téléphone:</span> <span className="font-medium">{salarie.telephone}</span></div>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </Card>
+      </div>
     );
   }
 
   if (client.type === 'independant') {
     const independant = client as ClientIndependant;
     return (
-      <Card className="zone-panel">
-        <div className="zone-title">
-          <Briefcase className="w-4 h-4" />
-          Informations Client - Indépendant
+      <div className="flex gap-3 flex-1 min-h-0">
+        <Avatar className="w-16 h-16 border-2 border-primary/30 flex-shrink-0">
+          <AvatarImage src={independant.avatar} />
+          <AvatarFallback className="bg-primary/20 text-primary">{getInitials(independant.nom, independant.prenom)}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs overflow-hidden">
+          <div><span className="text-muted-foreground">Nom:</span> <span className="font-medium">{independant.nom}</span></div>
+          <div><span className="text-muted-foreground">Prénom:</span> <span className="font-medium">{independant.prenom}</span></div>
+          <div><span className="text-muted-foreground">Âge:</span> <span className="font-medium">{independant.age} ans</span></div>
+          <div><span className="text-muted-foreground">Secteur:</span> <span className="font-medium">{independant.secteur}</span></div>
+          <div><span className="text-muted-foreground">Activité:</span> <span className="font-medium">{independant.activite}</span></div>
+          <div><span className="text-muted-foreground">Anc. Banque:</span> <span className="font-medium">{formatDuree(independant.ancienneteBanque)}</span></div>
+          <div><span className="text-muted-foreground">CA:</span> <span className="font-medium text-primary">{formatXAF(independant.chiffreAffaires)}</span></div>
+          <div><span className="text-muted-foreground">Marge:</span> <span className="font-medium">{formatPourcentage(independant.margeNette)}</span></div>
+          <div className="col-span-2"><span className="text-muted-foreground">Tél:</span> <span className="font-medium">{independant.telephone}</span></div>
         </div>
-        <div className="flex gap-4">
-          <Avatar className="w-20 h-20 border-2 border-primary/30">
-            <AvatarImage src={independant.avatar} />
-            <AvatarFallback className="bg-primary/20 text-primary text-xl">
-              {getInitials(independant.nom, independant.prenom)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 grid grid-cols-3 gap-x-4 gap-y-2">
-            <div>
-              <p className="data-label">Nom</p>
-              <p className="data-value">{independant.nom}</p>
-            </div>
-            <div>
-              <p className="data-label">Prénom</p>
-              <p className="data-value">{independant.prenom}</p>
-            </div>
-            <div>
-              <p className="data-label">Âge</p>
-              <p className="data-value">{independant.age} ans</p>
-            </div>
-            <div>
-              <p className="data-label">Activité</p>
-              <p className="data-value">{independant.activite}</p>
-            </div>
-            <div>
-              <p className="data-label">Secteur</p>
-              <p className="data-value">{independant.secteur}</p>
-            </div>
-            <div>
-              <p className="data-label">Anc. Banque</p>
-              <p className="data-value">{formatDuree(independant.ancienneteBanque)}</p>
-            </div>
-            <div>
-              <p className="data-label">Chiffre d'Affaires</p>
-              <p className="data-value text-primary font-semibold number-format">{formatXAF(independant.chiffreAffaires)}</p>
-            </div>
-            <div>
-              <p className="data-label">Marge Nette</p>
-              <p className="data-value">{formatPourcentage(independant.margeNette)}</p>
-            </div>
-            <div>
-              <p className="data-label">Téléphone</p>
-              <p className="data-value">{independant.telephone}</p>
-            </div>
-          </div>
-        </div>
-        <Button variant="outline" size="sm" className="mt-3 w-full">
-          <Eye className="w-4 h-4 mr-2" />
-          Voir Plus (Fiche KYC)
-        </Button>
-      </Card>
+      </div>
     );
   }
 
   // Entreprise
   const entreprise = client as ClientEntreprise;
   const company = companies.find(c => c.id === entreprise.companyId);
+  return (
+    <div className="flex gap-3 flex-1 min-h-0">
+      {company?.logo ? (
+        <img src={company.logo} className="w-16 h-16 object-contain rounded-lg bg-background p-1 flex-shrink-0" />
+      ) : (
+        <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+          <Building2 className="w-6 h-6 text-muted-foreground" />
+        </div>
+      )}
+      <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs overflow-hidden">
+        <div className="col-span-2"><span className="text-muted-foreground">Dénomination:</span> <span className="font-medium">{company?.name}</span></div>
+        <div><span className="text-muted-foreground">Sigle:</span> <span className="font-medium">{company?.sigle}</span></div>
+        <div><span className="text-muted-foreground">RCCM:</span> <span className="font-medium text-xs">{company?.rccm}</span></div>
+        <div><span className="text-muted-foreground">Secteur:</span> <span className="font-medium">{company?.secteur}</span></div>
+        <div><span className="text-muted-foreground">Responsable:</span> <span className="font-medium">{company?.responsable}</span></div>
+        <div><span className="text-muted-foreground">Siège:</span> <span className="font-medium">{company?.siege}</span></div>
+        <div><span className="text-muted-foreground">Employés:</span> <span className="font-medium">{company?.nbEmployes}</span></div>
+      </div>
+    </div>
+  );
+}
+
+// Zone Risques Component (same structure for both Internal and BEAC)
+function ZoneRisques({ 
+  type, 
+  nbCredits, 
+  montantGlobal, 
+  encours, 
+  impayes, 
+  score,
+  credits,
+  creditsBEAC 
+}: { 
+  type: 'interne' | 'beac';
+  nbCredits: number;
+  montantGlobal: number;
+  encours: number;
+  impayes: number;
+  score: string;
+  credits?: ReturnType<typeof generateCreditsInterne>;
+  creditsBEAC?: ReturnType<typeof generateCreditsBEAC>;
+}) {
+  const banques = ['BICEC', 'SGBC', 'UBA', 'Afriland', 'Ecobank', 'SCB'];
   
   return (
-    <Card className="zone-panel">
-      <div className="zone-title">
-        <Building2 className="w-4 h-4" />
-        Informations Client - Entreprise
-      </div>
-      <div className="flex gap-4">
-        {company?.logo ? (
-          <img src={company.logo} alt={company.sigle} className="w-20 h-20 object-contain rounded-lg bg-background p-2" />
-        ) : (
-          <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center">
-            <Building2 className="w-8 h-8 text-muted-foreground" />
-          </div>
-        )}
-        <div className="flex-1 grid grid-cols-3 gap-x-4 gap-y-2">
-          <div className="col-span-2">
-            <p className="data-label">Dénomination</p>
-            <p className="data-value">{company?.name}</p>
-          </div>
-          <div>
-            <p className="data-label">Sigle</p>
-            <p className="data-value">{company?.sigle}</p>
-          </div>
-          <div>
-            <p className="data-label">RCCM</p>
-            <p className="data-value text-xs">{company?.rccm}</p>
-          </div>
-          <div>
-            <p className="data-label">Secteur</p>
-            <p className="data-value">{company?.secteur}</p>
-          </div>
-          <div>
-            <p className="data-label">Responsable</p>
-            <p className="data-value">{company?.responsable}</p>
-          </div>
-          <div>
-            <p className="data-label">Siège Social</p>
-            <p className="data-value">{company?.siege}</p>
-          </div>
-          <div>
-            <p className="data-label">Date Création</p>
-            <p className="data-value">{company?.dateCreation ? formatDate(company.dateCreation) : 'N/A'}</p>
-          </div>
-          <div>
-            <p className="data-label">Employés</p>
-            <p className="data-value">{company?.nbEmployes}</p>
-          </div>
+    <div className="flex gap-4 flex-1 items-center">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-5 gap-2 flex-1">
+        <div className="p-2 rounded-lg bg-muted/50 text-center">
+          <p className="text-lg font-bold">{nbCredits}</p>
+          <p className="text-[10px] text-muted-foreground">Nb Crédits</p>
         </div>
-      </div>
-      <Button variant="outline" size="sm" className="mt-3 w-full">
-        <Eye className="w-4 h-4 mr-2" />
-        Voir Plus (Fiche KYC)
-      </Button>
-    </Card>
-  );
-}
-
-// Zone B - Credit Form Component
-function ZoneCredit({ 
-  form, 
-  setForm, 
-  handleMontantChange, 
-  selectedCredit, 
-  mensualite, 
-  coutTotal 
-}: {
-  form: any;
-  setForm: any;
-  handleMontantChange: (v: string) => void;
-  selectedCredit: typeof typesCredit[0] | undefined;
-  mensualite: number;
-  coutTotal: number;
-}) {
-  return (
-    <Card className="zone-panel">
-      <div className="zone-title">
-        <CreditCard className="w-4 h-4" />
-        Paramètres du Crédit
-      </div>
-      <div className="grid grid-cols-2 gap-4 flex-1">
-        <div className="space-y-2">
-          <Label className="text-xs">Type de Crédit</Label>
-          <Select value={form.typeCredit} onValueChange={(v) => setForm((p: any) => ({ ...p, typeCredit: v }))}>
-            <SelectTrigger className="input-dark">
-              <SelectValue placeholder="Sélectionner..." />
-            </SelectTrigger>
-            <SelectContent>
-              {typesCredit.map(t => (
-                <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs">Montant Demandé (XAF)</Label>
-          <Input
-            value={form.montant}
-            onChange={(e) => handleMontantChange(e.target.value)}
-            placeholder="0"
-            className="input-dark number-format"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs">Durée (mois)</Label>
-          <Select value={form.duree} onValueChange={(v) => setForm((p: any) => ({ ...p, duree: v }))}>
-            <SelectTrigger className="input-dark">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[6, 12, 18, 24, 36, 48, 60, 72, 84].map(d => (
-                <SelectItem key={d} value={d.toString()}>{d} mois</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs">Différé (mois)</Label>
-          <Select value={form.differe} onValueChange={(v) => setForm((p: any) => ({ ...p, differe: v }))}>
-            <SelectTrigger className="input-dark">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[0, 1, 2, 3, 6].map(d => (
-                <SelectItem key={d} value={d.toString()}>{d} mois</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs">Taux (%)</Label>
-          <Input
-            value={selectedCredit ? formatPourcentage(selectedCredit.taux) : '-'}
-            readOnly
-            className="input-dark bg-muted/50"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs">Mensualité</Label>
-          <Input
-            value={mensualite ? formatXAF(mensualite) : '-'}
-            readOnly
-            className="input-dark bg-muted/50 text-primary font-semibold"
-          />
-        </div>
-        <div className="col-span-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Coût Total du Crédit</span>
-            <span className="text-lg font-bold text-primary number-format">{coutTotal ? formatXAF(coutTotal) : '-'}</span>
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-// Zone C - Internal Risks Component
-function ZoneRisquesInternes({ credits, totalEncours, totalMontant }: {
-  credits: ReturnType<typeof generateCreditsInterne>;
-  totalEncours: number;
-  totalMontant: number;
-}) {
-  return (
-    <Card className="zone-panel">
-      <div className="zone-title">
-        <TrendingUp className="w-4 h-4" />
-        Engagements Internes
-      </div>
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="text-center p-2 rounded-lg bg-muted/50">
-          <p className="text-xl font-bold text-foreground">{credits.length}</p>
-          <p className="text-[10px] text-muted-foreground">Nbre Crédits</p>
-        </div>
-        <div className="text-center p-2 rounded-lg bg-muted/50">
-          <p className="text-sm font-bold text-foreground number-format">{formatXAF(totalMontant).replace(' XAF', '')}</p>
+        <div className="p-2 rounded-lg bg-muted/50 text-center">
+          <p className="text-sm font-bold number-format">{formatXAF(montantGlobal).replace(' FCFA', '')}</p>
           <p className="text-[10px] text-muted-foreground">Montant Global</p>
         </div>
-        <div className="text-center p-2 rounded-lg bg-muted/50">
-          <p className="text-sm font-bold text-primary number-format">{formatXAF(totalEncours).replace(' XAF', '')}</p>
+        <div className="p-2 rounded-lg bg-muted/50 text-center">
+          <p className="text-sm font-bold text-primary number-format">{formatXAF(encours).replace(' FCFA', '')}</p>
           <p className="text-[10px] text-muted-foreground">Encours</p>
         </div>
-      </div>
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm" className="w-full">
-            <Eye className="w-4 h-4 mr-2" />
-            Voir Détails
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Historique Crédits Internes</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-x-auto mt-4">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="p-2 text-left">Date</th>
-                  <th className="p-2 text-left">Type</th>
-                  <th className="p-2 text-right">Montant</th>
-                  <th className="p-2 text-right">Mensualité</th>
-                  <th className="p-2 text-right">Encours</th>
-                  <th className="p-2 text-center">Statut</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {credits.map(c => (
-                  <tr key={c.id}>
-                    <td className="p-2">{formatDate(c.dateOctroi)}</td>
-                    <td className="p-2">{c.type}</td>
-                    <td className="p-2 text-right number-format">{formatXAF(c.montantInitial)}</td>
-                    <td className="p-2 text-right number-format">{formatXAF(c.mensualite)}</td>
-                    <td className="p-2 text-right number-format">{formatXAF(c.encours)}</td>
-                    <td className="p-2 text-center">
-                      <Badge className={cn(
-                        c.statut === 'sain' ? 'bg-success/20 text-success' :
-                        c.statut === 'sensible' ? 'bg-warning/20 text-warning' : 'bg-destructive/20 text-destructive'
-                      )}>
-                        {c.statut}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-                {credits.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-4 text-center text-muted-foreground">
-                      Aucun crédit en cours
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  );
-}
-
-// Zone C - BEAC Risks Component
-function ZoneRisquesBEAC({ credits, totalBEAC, totalImpayes, score }: {
-  credits: ReturnType<typeof generateCreditsBEAC>;
-  totalBEAC: number;
-  totalImpayes: number;
-  score: string;
-}) {
-  return (
-    <Card className="zone-panel">
-      <div className="zone-title">
-        <AlertTriangle className="w-4 h-4" />
-        Centrale des Risques BEAC
-      </div>
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="text-center p-2 rounded-lg bg-muted/50">
+        <div className="p-2 rounded-lg bg-muted/50 text-center">
+          <p className={cn("text-sm font-bold number-format", impayes > 0 ? 'text-destructive' : 'text-success')}>
+            {formatXAF(impayes).replace(' FCFA', '')}
+          </p>
+          <p className="text-[10px] text-muted-foreground">Impayés</p>
+        </div>
+        <div className="p-2 rounded-lg bg-muted/50 text-center">
           <p className={cn(
             "text-xl font-bold",
             score === 'A' ? 'text-success' : score === 'B' ? 'text-warning' : 'text-destructive'
           )}>{score}</p>
           <p className="text-[10px] text-muted-foreground">Score</p>
         </div>
-        <div className="text-center p-2 rounded-lg bg-muted/50">
-          <p className="text-sm font-bold text-foreground number-format">{formatXAF(totalBEAC).replace(' XAF', '')}</p>
-          <p className="text-[10px] text-muted-foreground">Encours Système</p>
-        </div>
-        <div className="text-center p-2 rounded-lg bg-muted/50">
-          <p className={cn(
-            "text-sm font-bold number-format",
-            totalImpayes > 0 ? 'text-destructive' : 'text-success'
-          )}>{formatXAF(totalImpayes).replace(' XAF', '')}</p>
-          <p className="text-[10px] text-muted-foreground">Impayés</p>
-        </div>
       </div>
+
+      {/* Details Button */}
       <Dialog>
         <DialogTrigger asChild>
-          <Button variant="outline" size="sm" className="w-full">
-            <Eye className="w-4 h-4 mr-2" />
-            Voir Centrale
+          <Button variant="outline" size="sm">
+            <Eye className="w-4 h-4 mr-1" />
+            Détails
           </Button>
         </DialogTrigger>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Centrale des Risques BEAC</DialogTitle>
+            <DialogTitle>{type === 'interne' ? 'Historique Crédits Internes' : 'Centrale des Risques BEAC'}</DialogTitle>
           </DialogHeader>
-          <div className="overflow-x-auto mt-4">
+          <div className="mt-4 max-h-96 overflow-auto">
+            {type === 'beac' && (
+              <div className="mb-4 flex gap-2 flex-wrap">
+                {banques.map(b => (
+                  <Badge key={b} variant="outline">{b}</Badge>
+                ))}
+              </div>
+            )}
             <table className="w-full text-sm">
-              <thead className="bg-muted/50">
+              <thead className="bg-muted/50 sticky top-0">
                 <tr>
-                  <th className="p-2 text-left">Banque</th>
+                  {type === 'beac' && <th className="p-2 text-left">Banque</th>}
+                  <th className="p-2 text-left">{type === 'interne' ? 'Date' : 'Type'}</th>
                   <th className="p-2 text-left">Type</th>
                   <th className="p-2 text-right">Montant Initial</th>
-                  <th className="p-2 text-right">Solde Restant</th>
+                  <th className="p-2 text-right">{type === 'interne' ? 'Encours' : 'Solde Restant'}</th>
                   <th className="p-2 text-right">Impayés</th>
-                  <th className="p-2 text-center">Jours Retard</th>
                   <th className="p-2 text-center">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {credits.map(c => (
+                {type === 'interne' && credits?.map(c => (
+                  <tr key={c.id}>
+                    <td className="p-2">{formatDate(c.dateOctroi)}</td>
+                    <td className="p-2">{c.type}</td>
+                    <td className="p-2 text-right number-format">{formatXAF(c.montantInitial)}</td>
+                    <td className="p-2 text-right number-format">{formatXAF(c.encours)}</td>
+                    <td className="p-2 text-right number-format">{formatXAF(c.impayes)}</td>
+                    <td className="p-2 text-center">
+                      <Badge className={cn(
+                        c.statut === 'sain' ? 'bg-success/20 text-success' :
+                        c.statut === 'sensible' ? 'bg-warning/20 text-warning' : 'bg-destructive/20 text-destructive'
+                      )}>{c.statut}</Badge>
+                    </td>
+                  </tr>
+                ))}
+                {type === 'beac' && creditsBEAC?.map(c => (
                   <tr key={c.id}>
                     <td className="p-2">{c.banque}</td>
                     <td className="p-2">{c.typeEngagement}</td>
                     <td className="p-2 text-right number-format">{formatXAF(c.montantInitial)}</td>
                     <td className="p-2 text-right number-format">{formatXAF(c.soldeRestant)}</td>
                     <td className="p-2 text-right number-format">{formatXAF(c.impayes)}</td>
-                    <td className="p-2 text-center">{c.joursRetard || '-'}</td>
                     <td className="p-2 text-center">
                       <Badge className={cn(
                         c.statut === 'sain' ? 'bg-success/20 text-success' :
                         c.statut === 'douteux' ? 'bg-warning/20 text-warning' : 'bg-destructive/20 text-destructive'
-                      )}>
-                        {c.statut}
-                      </Badge>
+                      )}>{c.statut}</Badge>
                     </td>
                   </tr>
                 ))}
-                {credits.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="p-4 text-center text-muted-foreground">
-                      Aucun engagement déclaré
-                    </td>
-                  </tr>
+                {((type === 'interne' && (!credits || credits.length === 0)) || 
+                  (type === 'beac' && (!creditsBEAC || creditsBEAC.length === 0))) && (
+                  <tr><td colSpan={7} className="p-4 text-center text-muted-foreground">Aucun engagement</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </DialogContent>
       </Dialog>
-    </Card>
-  );
-}
-
-// Zone E - Garanties Component
-function ZoneGaranties({ form, setForm }: { form: any; setForm: any }) {
-  return (
-    <Card className="zone-panel">
-      <div className="zone-title">
-        <Shield className="w-4 h-4" />
-        Garanties
-      </div>
-      <div className="space-y-4 flex-1">
-        <div className="space-y-2">
-          <Label className="text-xs">Type de Garantie</Label>
-          <Select value={form.type} onValueChange={(v) => setForm((p: any) => ({ ...p, type: v }))}>
-            <SelectTrigger className="input-dark">
-              <SelectValue placeholder="Sélectionner le type..." />
-            </SelectTrigger>
-            <SelectContent>
-              {typesGarantie.map(t => (
-                <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {form.type === 'personnelle' && (
-          <div className="grid grid-cols-3 gap-3 animate-fade-in">
-            <div className="space-y-2">
-              <Label className="text-xs">Nom de la Caution</Label>
-              <Input
-                value={form.nomCaution}
-                onChange={(e) => setForm((p: any) => ({ ...p, nomCaution: e.target.value }))}
-                className="input-dark"
-                placeholder="Nom complet"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">N° CNI</Label>
-              <Input
-                value={form.cniCaution}
-                onChange={(e) => setForm((p: any) => ({ ...p, cniCaution: e.target.value }))}
-                className="input-dark"
-                placeholder="N° CNI"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Revenu Caution (XAF)</Label>
-              <Input
-                value={form.revenuCaution}
-                onChange={(e) => setForm((p: any) => ({ ...p, revenuCaution: e.target.value }))}
-                className="input-dark"
-                placeholder="0"
-              />
-            </div>
-            <div className="col-span-3">
-              <Label className="text-xs">Acte de Caution</Label>
-              <div className="mt-2 border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors">
-                <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Cliquez pour uploader</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {form.type === 'immo' && (
-          <div className="grid grid-cols-3 gap-3 animate-fade-in">
-            <div className="space-y-2">
-              <Label className="text-xs">Localisation du Bien</Label>
-              <Input
-                value={form.localisation}
-                onChange={(e) => setForm((p: any) => ({ ...p, localisation: e.target.value }))}
-                className="input-dark"
-                placeholder="Adresse"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">N° Titre Foncier</Label>
-              <Input
-                value={form.titreFoncier}
-                onChange={(e) => setForm((p: any) => ({ ...p, titreFoncier: e.target.value }))}
-                className="input-dark"
-                placeholder="TF-XXX"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Valeur du Bien (XAF)</Label>
-              <Input
-                value={form.valeurBien}
-                onChange={(e) => setForm((p: any) => ({ ...p, valeurBien: e.target.value }))}
-                className="input-dark"
-                placeholder="0"
-              />
-            </div>
-            <div className="col-span-3">
-              <Label className="text-xs">Titre Foncier (Document)</Label>
-              <div className="mt-2 border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors">
-                <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Cliquez pour uploader</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {form.type === 'vehicule' && (
-          <div className="grid grid-cols-2 gap-3 animate-fade-in">
-            <div className="space-y-2">
-              <Label className="text-xs">Marque & Modèle</Label>
-              <Input
-                value={form.marque}
-                onChange={(e) => setForm((p: any) => ({ ...p, marque: e.target.value }))}
-                className="input-dark"
-                placeholder="Toyota Corolla"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">N° Châssis</Label>
-              <Input
-                value={form.chassis}
-                onChange={(e) => setForm((p: any) => ({ ...p, chassis: e.target.value }))}
-                className="input-dark"
-                placeholder="VIN"
-              />
-            </div>
-            <div className="col-span-2">
-              <Label className="text-xs">Carte Grise</Label>
-              <div className="mt-2 border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors">
-                <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Cliquez pour uploader</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!form.type && (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <p className="text-sm">Sélectionnez un type de garantie</p>
-          </div>
-        )}
-      </div>
-    </Card>
+    </div>
   );
 }

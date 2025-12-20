@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
+import { useNotifications } from '@/contexts/NotificationContext';
 import {
   Users,
   RefreshCcw,
@@ -15,19 +16,23 @@ import {
   ChevronRight,
   CheckCircle2,
   ArrowRight,
+  ArrowLeftRight,
 } from 'lucide-react';
-import { staff, clients, companies, Client, ClientSalarie, ClientIndependant } from '@/data/mockData';
+import { staff, clients as initialClients, companies, Client, ClientSalarie, ClientIndependant } from '@/data/mockData';
 import { getInitials } from '@/lib/formatters';
 
 export default function AdminGestionnaires() {
+  const { addNotification } = useNotifications();
   const [selectedGestionnaire, setSelectedGestionnaire] = useState<string | null>(null);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [targetManager, setTargetManager] = useState('');
+  const [clientsList, setClientsList] = useState(initialClients);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const gestionnaires = staff.filter(s => s.role === 'gestionnaire');
 
   const getClientsForManager = (managerId: string) => {
-    return clients.filter(c => c.gestionnaireId === managerId);
+    return clientsList.filter(c => c.gestionnaireId === managerId);
   };
 
   const getClientName = (client: Client) => {
@@ -40,13 +45,45 @@ export default function AdminGestionnaires() {
   };
 
   const handleTransfer = () => {
-    if (!selectedClient || !targetManager) return;
+    if (!selectedClient || !targetManager || !selectedGestionnaire) return;
     
-    const manager = gestionnaires.find(g => g.id === targetManager);
+    const sourceManager = gestionnaires.find(g => g.id === selectedGestionnaire);
+    const destManager = gestionnaires.find(g => g.id === targetManager);
+    const clientName = getClientName(selectedClient);
+    
+    // Update client's manager
+    setClientsList(prev => prev.map(c => 
+      c.id === selectedClient.id ? { ...c, gestionnaireId: targetManager } : c
+    ));
+    
+    // Notifications
+    addNotification({
+      title: "Client transféré",
+      message: `${clientName} transféré de ${sourceManager?.prenom} à ${destManager?.prenom}`,
+      type: "warning",
+      link: "/dashboard/gestionnaires"
+    });
+    
+    // Notify source manager (loss)
+    addNotification({
+      title: "Client retiré",
+      message: `${clientName} a été transféré à ${destManager?.prenom} ${destManager?.nom}`,
+      type: "info"
+    });
+    
+    // Notify dest manager (gain)
+    addNotification({
+      title: "Nouveau client",
+      message: `${clientName} vous a été assigné par l'administrateur`,
+      type: "success"
+    });
+    
     toast({
       title: "Client transféré",
-      description: `Le client a été transféré à ${manager?.prenom} ${manager?.nom}`,
+      description: `${clientName} a été transféré à ${destManager?.prenom} ${destManager?.nom}`,
     });
+    
+    setTransferDialogOpen(false);
     setSelectedClient(null);
     setTargetManager('');
   };
@@ -55,7 +92,7 @@ export default function AdminGestionnaires() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold font-display">Gestionnaires</h1>
-        <p className="text-muted-foreground">Gérez l'équipe et les portefeuilles clients</p>
+        <p className="text-muted-foreground">Gérez l'équipe et transférez les clients entre gestionnaires</p>
       </div>
 
       {/* Gestionnaires Grid */}
@@ -124,11 +161,12 @@ export default function AdminGestionnaires() {
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5 text-primary" />
               Portefeuille de {gestionnaires.find(g => g.id === selectedGestionnaire)?.prenom}
+              <Badge className="ml-2">{getClientsForManager(selectedGestionnaire).length} clients</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {getClientsForManager(selectedGestionnaire).slice(0, 10).map(client => {
+              {getClientsForManager(selectedGestionnaire).map(client => {
                 const clientName = getClientName(client);
                 const avatar = client.type !== 'entreprise' ? (client as any).avatar : undefined;
 
@@ -155,7 +193,13 @@ export default function AdminGestionnaires() {
                       </p>
                     </div>
 
-                    <Dialog>
+                    <Dialog open={transferDialogOpen && selectedClient?.id === client.id} onOpenChange={(open) => {
+                      setTransferDialogOpen(open);
+                      if (!open) {
+                        setSelectedClient(null);
+                        setTargetManager('');
+                      }
+                    }}>
                       <DialogTrigger asChild>
                         <Button 
                           variant="outline" 
@@ -163,24 +207,41 @@ export default function AdminGestionnaires() {
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedClient(client);
+                            setTransferDialogOpen(true);
                           }}
                         >
-                          <RefreshCcw className="w-4 h-4 mr-2" />
+                          <ArrowLeftRight className="w-4 h-4 mr-2" />
                           Transférer
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Transférer le client</DialogTitle>
+                          <DialogTitle className="flex items-center gap-2">
+                            <RefreshCcw className="w-5 h-5 text-primary" />
+                            Transférer le client
+                          </DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4 mt-4">
-                          <p className="text-sm text-muted-foreground">
-                            Transférer <strong>{clientName}</strong> vers un autre gestionnaire
-                          </p>
+                          <div className="p-4 rounded-lg bg-muted/50 flex items-center gap-4">
+                            <Avatar className="w-12 h-12">
+                              <AvatarImage src={avatar} />
+                              <AvatarFallback>{clientName.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-semibold">{clientName}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Actuellement chez {gestionnaires.find(g => g.id === selectedGestionnaire)?.prenom}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-center">
+                            <ArrowRight className="w-6 h-6 text-primary" />
+                          </div>
                           
                           <Select value={targetManager} onValueChange={setTargetManager}>
                             <SelectTrigger className="input-dark">
-                              <SelectValue placeholder="Sélectionner un gestionnaire" />
+                              <SelectValue placeholder="Sélectionner le nouveau gestionnaire" />
                             </SelectTrigger>
                             <SelectContent>
                               {gestionnaires
@@ -194,28 +255,42 @@ export default function AdminGestionnaires() {
                                           {getInitials(g.nom, g.prenom)}
                                         </AvatarFallback>
                                       </Avatar>
-                                      {g.prenom} {g.nom}
+                                      {g.prenom} {g.nom} ({getClientsForManager(g.id).length} clients)
                                     </div>
                                   </SelectItem>
                                 ))}
                             </SelectContent>
                           </Select>
 
-                          <Button 
-                            variant="gold" 
-                            className="w-full"
-                            onClick={handleTransfer}
-                            disabled={!targetManager}
-                          >
-                            Confirmer le transfert
-                            <ArrowRight className="w-4 h-4 ml-2" />
-                          </Button>
+                          <div className="flex gap-2">
+                            <DialogClose asChild>
+                              <Button variant="outline" className="flex-1">
+                                Annuler
+                              </Button>
+                            </DialogClose>
+                            <Button 
+                              variant="gold" 
+                              className="flex-1"
+                              onClick={handleTransfer}
+                              disabled={!targetManager}
+                            >
+                              Confirmer le transfert
+                              <ArrowRight className="w-4 h-4 ml-2" />
+                            </Button>
+                          </div>
                         </div>
                       </DialogContent>
                     </Dialog>
                   </div>
                 );
               })}
+              
+              {getClientsForManager(selectedGestionnaire).length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="w-8 h-8 mx-auto mb-2" />
+                  <p>Aucun client dans ce portefeuille</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
