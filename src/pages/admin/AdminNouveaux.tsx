@@ -5,8 +5,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
+import { useNotifications } from '@/contexts/NotificationContext';
 import {
   Search,
   UserPlus,
@@ -15,17 +16,20 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
+  X,
 } from 'lucide-react';
-import { clients, staff, companies, Client, ClientSalarie, ClientIndependant } from '@/data/mockData';
+import { clients as initialClients, staff, companies, Client, ClientSalarie, ClientIndependant } from '@/data/mockData';
 import { getInitials } from '@/lib/formatters';
 
 export default function AdminNouveaux() {
+  const { addNotification } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedManager, setSelectedManager] = useState('');
+  const [clientsList, setClientsList] = useState(initialClients);
+  const [openDialogId, setOpenDialogId] = useState<string | null>(null);
 
   const gestionnaires = staff.filter(s => s.role === 'gestionnaire');
-  const nouveauxClients = clients.filter(c => !c.gestionnaireId);
+  const nouveauxClients = clientsList.filter(c => !c.gestionnaireId);
 
   const filteredClients = nouveauxClients.filter(client => {
     if (!searchQuery) return true;
@@ -38,16 +42,32 @@ export default function AdminNouveaux() {
     return company?.name.toLowerCase().includes(query);
   });
 
-  const handleAssign = () => {
-    if (!selectedClient || !selectedManager) return;
+  const handleAssign = (clientId: string) => {
+    if (!selectedManager) return;
     
     const manager = gestionnaires.find(g => g.id === selectedManager);
+    const client = clientsList.find(c => c.id === clientId);
+    
+    // Update client with manager
+    setClientsList(prev => prev.map(c => 
+      c.id === clientId ? { ...c, gestionnaireId: selectedManager } : c
+    ));
+    
+    // Send notifications
+    addNotification({
+      title: "Client assigné",
+      message: `${getClientName(client!)} a été assigné à ${manager?.prenom} ${manager?.nom}`,
+      type: "success",
+      link: "/dashboard/gestionnaires"
+    });
+    
     toast({
       title: "Client assigné",
       description: `Le client a été assigné à ${manager?.prenom} ${manager?.nom}`,
     });
-    setSelectedClient(null);
+    
     setSelectedManager('');
+    setOpenDialogId(null);
   };
 
   const getClientName = (client: Client) => {
@@ -57,6 +77,10 @@ export default function AdminNouveaux() {
     }
     const company = companies.find(co => co.id === (client as any).companyId);
     return company?.name || 'Entreprise';
+  };
+
+  const getManagerClients = (managerId: string) => {
+    return clientsList.filter(c => c.gestionnaireId === managerId).length;
   };
 
   return (
@@ -85,6 +109,28 @@ export default function AdminNouveaux() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Gestionnaires Overview */}
+      <div className="grid grid-cols-3 gap-4">
+        {gestionnaires.map(g => (
+          <Card key={g.id} className="glass-card">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-10 h-10 border border-border">
+                  <AvatarImage src={g.avatar} />
+                  <AvatarFallback className="bg-primary/20 text-primary text-sm">
+                    {getInitials(g.nom, g.prenom)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">{g.prenom} {g.nom}</p>
+                  <p className="text-sm text-muted-foreground">{getManagerClients(g.id)} clients</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       {/* Clients List */}
       <div className="grid gap-4">
@@ -118,12 +164,9 @@ export default function AdminNouveaux() {
                     </div>
                   </div>
 
-                  <Dialog>
+                  <Dialog open={openDialogId === client.id} onOpenChange={(open) => setOpenDialogId(open ? client.id : null)}>
                     <DialogTrigger asChild>
-                      <Button 
-                        variant="gold"
-                        onClick={() => setSelectedClient(client)}
-                      >
+                      <Button variant="gold">
                         <UserPlus className="w-4 h-4 mr-2" />
                         Assigner
                       </Button>
@@ -151,22 +194,29 @@ export default function AdminNouveaux() {
                                       {getInitials(g.nom, g.prenom)}
                                     </AvatarFallback>
                                   </Avatar>
-                                  {g.prenom} {g.nom} ({g.charge || 0} clients)
+                                  {g.prenom} {g.nom} ({getManagerClients(g.id)} clients)
                                 </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
 
-                        <Button 
-                          variant="gold" 
-                          className="w-full"
-                          onClick={handleAssign}
-                          disabled={!selectedManager}
-                        >
-                          Confirmer l'assignation
-                          <ArrowRight className="w-4 h-4 ml-2" />
-                        </Button>
+                        <div className="flex gap-2">
+                          <DialogClose asChild>
+                            <Button variant="outline" className="flex-1">
+                              Annuler
+                            </Button>
+                          </DialogClose>
+                          <Button 
+                            variant="gold" 
+                            className="flex-1"
+                            onClick={() => handleAssign(client.id)}
+                            disabled={!selectedManager}
+                          >
+                            Confirmer l'assignation
+                            <ArrowRight className="w-4 h-4 ml-2" />
+                          </Button>
+                        </div>
                       </div>
                     </DialogContent>
                   </Dialog>
@@ -179,8 +229,8 @@ export default function AdminNouveaux() {
         {filteredClients.length === 0 && (
           <Card className="glass-card">
             <CardContent className="p-12 text-center">
-              <Clock className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">Aucun client en attente d'assignation</p>
+              <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-success" />
+              <p className="text-muted-foreground">Tous les clients ont été assignés</p>
             </CardContent>
           </Card>
         )}
