@@ -67,6 +67,7 @@ export interface ClientIndependant {
   chiffreAffaires: number;
   margeNette: number;
   ancienneteBanque: number;
+  ancienneteActivite?: number;
   personnesCharge?: number;
   kycComplete: boolean;
   statut: 'nouveau' | 'en_cours' | 'panier' | 'comite' | 'approuve' | 'rejete';
@@ -128,6 +129,32 @@ export interface Message {
   lu: boolean;
 }
 
+// Règles d'octroi par type de crédit
+export interface RegleOctroi {
+  id: string;
+  creditTypeId: string;
+  ageMin: number;
+  ageMax: number;
+  ancienneteBanqueMin: number; // en mois
+  ancienneteEmploiMin: number; // en mois (pour salariés)
+  ancienneteActiviteMin: number; // en mois (pour indépendants)
+  revenuMin: number; // Pour salariés
+  caMin: number; // Pour indépendants
+  margeMin: number; // % minimum pour indépendants
+  tauxEndettementMax: number; // %
+  scoreBEACMin: 'A' | 'B' | 'C';
+  garantieObligatoire: boolean;
+  epargnePrealableMin: number; // % du montant demandé
+  montantMin: number;
+  montantMax: number;
+  dureeMin: number;
+  dureeMax: number;
+  tauxInteret: number;
+  differeMax: number;
+  clientsEligibles: ('salarie' | 'independant' | 'entreprise')[];
+  actif: boolean;
+}
+
 // Extended Companies data - Real Cameroonian companies
 export const companies: Company[] = [
   { id: 'c1', name: 'MTN Cameroon', sigle: 'MTN', rccm: 'RC/DLA/2000/B/4521', responsable: 'Stephen Blewett', siege: 'Douala, Akwa', secteur: 'Télécommunications', dateCreation: '2000-02-15', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/New-mtn-logo.svg/200px-New-mtn-logo.svg.png', nbEmployes: 1200 },
@@ -145,7 +172,6 @@ export const companies: Company[] = [
   { id: 'c13', name: 'CNPS', sigle: 'CNPS', rccm: 'RC/YDE/1969/B/0123', responsable: 'Alain Noël Olivier Mekulu', siege: 'Yaoundé, Centre', secteur: 'Assurance Sociale', dateCreation: '1969-10-01', nbEmployes: 2100 },
   { id: 'c14', name: 'Activa Assurances', sigle: 'ACTIVA', rccm: 'RC/DLA/1998/B/3456', responsable: 'Robert Sobze', siege: 'Douala, Bonanjo', secteur: 'Assurance', dateCreation: '1998-06-12', nbEmployes: 420 },
   { id: 'c15', name: 'Dangote Cement Cameroon', sigle: 'DANGOTE', rccm: 'RC/DLA/2015/B/9012', responsable: 'Babatunde Akinwumi', siege: 'Douala, Kribi', secteur: 'Industrie', dateCreation: '2015-02-28', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/39/Dangote_Industries_logo.png', nbEmployes: 560 },
-  // Additional companies
   { id: 'c16', name: 'Abbé Nestor Auto-École', sigle: 'ANA', rccm: 'RC/YDE/2010/B/1234', responsable: 'Abbé Nestor', siege: 'Yaoundé, Messa', secteur: 'Formation', dateCreation: '2010-03-15', nbEmployes: 45 },
   { id: 'c17', name: 'Acajou Palace Hôtel', sigle: 'ACAJOU', rccm: 'RC/DLA/2005/B/5678', responsable: 'Paul Tchouta', siege: 'Douala, Bonanjo', secteur: 'Hôtellerie', dateCreation: '2005-08-20', nbEmployes: 120 },
   { id: 'c18', name: 'Africa Global Logistics', sigle: 'AGL', rccm: 'RC/DLA/2018/B/9012', responsable: 'Michel Njoh', siege: 'Douala, Port', secteur: 'Logistique', dateCreation: '2018-01-01', nbEmployes: 890 },
@@ -265,6 +291,7 @@ function generateClients(): Client[] {
       chiffreAffaires: Math.floor(Math.random() * 80000000 + 5000000),
       margeNette: Math.floor(Math.random() * 20 + 5),
       ancienneteBanque: Math.floor(Math.random() * 96 + 6),
+      ancienneteActivite: Math.floor(Math.random() * 120 + 6),
       personnesCharge: Math.floor(Math.random() * 5),
       kycComplete: hasKyc,
       statut: randomElement(['nouveau', 'en_cours', 'panier'] as const),
@@ -298,90 +325,503 @@ function generateClients(): Client[] {
 
 export const clients = generateClients();
 
-// Generate credit history with impayes
-export function generateCreditsInterne(clientId: string): CreditInterne[] {
-  const count = Math.floor(Math.random() * 3);
-  const credits: CreditInterne[] = [];
-  
-  for (let i = 0; i < count; i++) {
-    const montant = Math.floor(Math.random() * 15000000 + 500000);
-    const encours = Math.floor(montant * (Math.random() * 0.7 + 0.1));
-    const impayes = Math.random() > 0.7 ? Math.floor(Math.random() * 500000) : 0;
-    credits.push({
-      id: `ci_${clientId}_${i}`,
-      clientId,
-      dateOctroi: `202${Math.floor(Math.random() * 4)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
-      montantInitial: montant,
-      type: randomElement(['Crédit Scolaire', 'Crédit Conso', 'Crédit Auto', 'Crédit Immobilier']),
-      mensualite: Math.floor(montant / (Math.random() * 36 + 12)),
-      encours,
-      impayes,
-      statut: impayes > 0 ? 'douteux' : (encours < montant * 0.3 ? 'sain' : 'sensible'),
-    });
-  }
-  
-  return credits;
-}
-
-export function generateCreditsBEAC(clientId: string): CreditBEAC[] {
-  const count = Math.floor(Math.random() * 3);
-  const credits: CreditBEAC[] = [];
-  const banques = ['UBA', 'SCB', 'SGBC', 'Ecobank', 'Standard Chartered', 'Afriland', 'BICEC', 'Banque Atlantique'];
-  
-  for (let i = 0; i < count; i++) {
-    const montant = Math.floor(Math.random() * 25000000 + 1000000);
-    const solde = Math.floor(montant * (Math.random() * 0.6 + 0.2));
-    const impayes = Math.random() > 0.7 ? Math.floor(Math.random() * 3000000) : 0;
-    
-    credits.push({
-      id: `cb_${clientId}_${i}`,
-      clientId,
-      banque: randomElement(banques),
-      typeEngagement: randomElement(['Découvert', 'Crédit MT', 'Crédit LT', 'Caution']),
-      montantInitial: montant,
-      soldeRestant: solde,
-      impayes,
-      joursRetard: impayes > 0 ? Math.floor(Math.random() * 90 + 1) : 0,
-      statut: impayes === 0 ? 'sain' : (impayes > 1000000 ? 'compromis' : 'douteux'),
-    });
-  }
-  
-  return credits;
-}
-
+// Types de crédit avec règles d'octroi
 export const typesCredit = [
-  { id: 'scolaire', label: 'Crédit Scolaire', taux: 8.5, actif: true },
-  { id: 'conso', label: 'Crédit Consommation', taux: 12.0, actif: true },
-  { id: 'auto', label: 'Crédit Auto', taux: 10.5, actif: true },
-  { id: 'immo', label: 'Crédit Immobilier', taux: 7.5, actif: true },
-  { id: 'equipement', label: 'Crédit Équipement', taux: 9.0, actif: true },
-  { id: 'tresorerie', label: 'Crédit Trésorerie', taux: 14.0, actif: false },
+  { id: 'conso', label: 'Crédit Consommation', taux: 12 },
+  { id: 'scolaire', label: 'Crédit Scolaire', taux: 8.5 },
+  { id: 'immo', label: 'Crédit Immobilier', taux: 7.5 },
+  { id: 'auto', label: 'Crédit Auto', taux: 10.5 },
+  { id: 'equipement', label: 'Crédit Équipement', taux: 9 },
+  { id: 'tresorerie', label: 'Crédit Trésorerie', taux: 14 },
+  { id: 'fonds_roulement', label: 'Fonds de Roulement', taux: 11 },
+  { id: 'agricole', label: 'Crédit Agricole', taux: 6 },
+];
+
+// Règles d'octroi détaillées par type de crédit
+export const reglesOctroi: RegleOctroi[] = [
+  {
+    id: 'regle_conso',
+    creditTypeId: 'conso',
+    ageMin: 21,
+    ageMax: 60,
+    ancienneteBanqueMin: 6,
+    ancienneteEmploiMin: 12,
+    ancienneteActiviteMin: 12,
+    revenuMin: 150000,
+    caMin: 500000,
+    margeMin: 10,
+    tauxEndettementMax: 35,
+    scoreBEACMin: 'B',
+    garantieObligatoire: false,
+    epargnePrealableMin: 10,
+    montantMin: 100000,
+    montantMax: 10000000,
+    dureeMin: 3,
+    dureeMax: 36,
+    tauxInteret: 12,
+    differeMax: 3,
+    clientsEligibles: ['salarie', 'independant'],
+    actif: true,
+  },
+  {
+    id: 'regle_scolaire',
+    creditTypeId: 'scolaire',
+    ageMin: 21,
+    ageMax: 65,
+    ancienneteBanqueMin: 3,
+    ancienneteEmploiMin: 6,
+    ancienneteActiviteMin: 6,
+    revenuMin: 100000,
+    caMin: 300000,
+    margeMin: 5,
+    tauxEndettementMax: 40,
+    scoreBEACMin: 'C',
+    garantieObligatoire: false,
+    epargnePrealableMin: 5,
+    montantMin: 50000,
+    montantMax: 5000000,
+    dureeMin: 3,
+    dureeMax: 12,
+    tauxInteret: 8.5,
+    differeMax: 2,
+    clientsEligibles: ['salarie', 'independant'],
+    actif: true,
+  },
+  {
+    id: 'regle_immo',
+    creditTypeId: 'immo',
+    ageMin: 25,
+    ageMax: 55,
+    ancienneteBanqueMin: 24,
+    ancienneteEmploiMin: 36,
+    ancienneteActiviteMin: 48,
+    revenuMin: 500000,
+    caMin: 2000000,
+    margeMin: 20,
+    tauxEndettementMax: 30,
+    scoreBEACMin: 'A',
+    garantieObligatoire: true,
+    epargnePrealableMin: 20,
+    montantMin: 5000000,
+    montantMax: 100000000,
+    dureeMin: 24,
+    dureeMax: 240,
+    tauxInteret: 7.5,
+    differeMax: 12,
+    clientsEligibles: ['salarie', 'entreprise'],
+    actif: true,
+  },
+  {
+    id: 'regle_auto',
+    creditTypeId: 'auto',
+    ageMin: 23,
+    ageMax: 60,
+    ancienneteBanqueMin: 12,
+    ancienneteEmploiMin: 18,
+    ancienneteActiviteMin: 24,
+    revenuMin: 300000,
+    caMin: 1000000,
+    margeMin: 15,
+    tauxEndettementMax: 33,
+    scoreBEACMin: 'B',
+    garantieObligatoire: true,
+    epargnePrealableMin: 15,
+    montantMin: 1000000,
+    montantMax: 30000000,
+    dureeMin: 12,
+    dureeMax: 60,
+    tauxInteret: 10.5,
+    differeMax: 3,
+    clientsEligibles: ['salarie', 'independant', 'entreprise'],
+    actif: true,
+  },
+  {
+    id: 'regle_equipement',
+    creditTypeId: 'equipement',
+    ageMin: 21,
+    ageMax: 65,
+    ancienneteBanqueMin: 6,
+    ancienneteEmploiMin: 12,
+    ancienneteActiviteMin: 12,
+    revenuMin: 200000,
+    caMin: 800000,
+    margeMin: 12,
+    tauxEndettementMax: 35,
+    scoreBEACMin: 'B',
+    garantieObligatoire: true,
+    epargnePrealableMin: 10,
+    montantMin: 500000,
+    montantMax: 20000000,
+    dureeMin: 6,
+    dureeMax: 48,
+    tauxInteret: 9,
+    differeMax: 6,
+    clientsEligibles: ['independant', 'entreprise'],
+    actif: true,
+  },
+  {
+    id: 'regle_tresorerie',
+    creditTypeId: 'tresorerie',
+    ageMin: 21,
+    ageMax: 60,
+    ancienneteBanqueMin: 12,
+    ancienneteEmploiMin: 12,
+    ancienneteActiviteMin: 18,
+    revenuMin: 250000,
+    caMin: 1000000,
+    margeMin: 10,
+    tauxEndettementMax: 30,
+    scoreBEACMin: 'A',
+    garantieObligatoire: false,
+    epargnePrealableMin: 15,
+    montantMin: 100000,
+    montantMax: 5000000,
+    dureeMin: 1,
+    dureeMax: 12,
+    tauxInteret: 14,
+    differeMax: 1,
+    clientsEligibles: ['salarie', 'independant'],
+    actif: true,
+  },
+  {
+    id: 'regle_fonds_roulement',
+    creditTypeId: 'fonds_roulement',
+    ageMin: 21,
+    ageMax: 65,
+    ancienneteBanqueMin: 6,
+    ancienneteEmploiMin: 0,
+    ancienneteActiviteMin: 12,
+    revenuMin: 0,
+    caMin: 500000,
+    margeMin: 8,
+    tauxEndettementMax: 40,
+    scoreBEACMin: 'B',
+    garantieObligatoire: false,
+    epargnePrealableMin: 10,
+    montantMin: 100000,
+    montantMax: 15000000,
+    dureeMin: 3,
+    dureeMax: 24,
+    tauxInteret: 11,
+    differeMax: 3,
+    clientsEligibles: ['independant', 'entreprise'],
+    actif: true,
+  },
+  {
+    id: 'regle_agricole',
+    creditTypeId: 'agricole',
+    ageMin: 21,
+    ageMax: 65,
+    ancienneteBanqueMin: 6,
+    ancienneteEmploiMin: 0,
+    ancienneteActiviteMin: 24,
+    revenuMin: 0,
+    caMin: 300000,
+    margeMin: 5,
+    tauxEndettementMax: 45,
+    scoreBEACMin: 'C',
+    garantieObligatoire: false,
+    epargnePrealableMin: 5,
+    montantMin: 50000,
+    montantMax: 10000000,
+    dureeMin: 6,
+    dureeMax: 36,
+    tauxInteret: 6,
+    differeMax: 6,
+    clientsEligibles: ['independant'],
+    actif: true,
+  },
 ];
 
 export const typesGarantie = [
-  { id: 'personnelle', label: 'Garantie Personnelle (Caution)' },
-  { id: 'immo', label: 'Garantie Réelle - Bien Immobilier' },
-  { id: 'vehicule', label: 'Garantie Réelle - Véhicule' },
-  { id: 'nantissement', label: 'Nantissement' },
+  { id: 'personnelle', label: 'Caution Personnelle' },
+  { id: 'solidaire', label: 'Caution Solidaire (Groupe)' },
+  { id: 'morale', label: 'Caution Morale' },
+  { id: 'immo', label: 'Garantie Immobilière' },
+  { id: 'vehicule', label: 'Nantissement Véhicule' },
+  { id: 'materiel', label: 'Nantissement Matériel' },
+  { id: 'epargne', label: 'Épargne Bloquée' },
+  { id: 'assurance', label: 'Assurance Crédit' },
 ];
 
-// Pre-defined messages for client contact
-export const messagesPredefinis = {
-  demande_pret: [
-    { sujet: 'Demande de crédit scolaire', contenu: 'Je souhaite obtenir un crédit pour financer la scolarité de mes enfants.', reponseAuto: 'Votre demande de crédit scolaire a bien été reçue. Un gestionnaire vous contactera dans les 24h.' },
-    { sujet: 'Demande de crédit consommation', contenu: 'Je souhaite obtenir un crédit consommation pour un projet personnel.', reponseAuto: 'Votre demande de crédit consommation a bien été enregistrée. Merci de compléter votre dossier KYC si ce n\'est pas fait.' },
-    { sujet: 'Demande de crédit immobilier', contenu: 'Je souhaite obtenir un financement pour l\'achat d\'un bien immobilier.', reponseAuto: 'Votre demande de crédit immobilier nécessite une étude approfondie. Un conseiller spécialisé vous contactera.' },
-  ],
-  probleme: [
-    { sujet: 'Problème de remboursement', contenu: 'Je rencontre des difficultés pour honorer mes échéances ce mois-ci.', reponseAuto: 'Nous avons bien reçu votre signalement. Un gestionnaire vous contactera pour étudier les solutions possibles.' },
-    { sujet: 'Erreur sur mon compte', contenu: 'J\'ai constaté une erreur sur le solde de mon compte.', reponseAuto: 'Votre réclamation a été enregistrée. Notre équipe vérifiera et vous tiendra informé sous 48h.' },
-    { sujet: 'Demande de relevé', contenu: 'Je souhaite obtenir un relevé détaillé de mon compte.', reponseAuto: 'Votre demande de relevé sera traitée dans les meilleurs délais.' },
-  ],
-  rdv: [
-    { sujet: 'Demande de rendez-vous', contenu: 'Je souhaite prendre rendez-vous pour discuter de mon dossier.', reponseAuto: 'Votre demande de RDV a été transmise. Vous recevrez une proposition de créneau par SMS.' },
-    { sujet: 'Modification de rendez-vous', contenu: 'Je souhaite reporter mon rendez-vous prévu.', reponseAuto: 'Votre demande de modification a été prise en compte.' },
-  ],
-};
+// Fonction pour vérifier l'éligibilité d'un client à un type de crédit
+export interface EligibilityResult {
+  eligible: boolean;
+  raisons: string[];
+  score: number;
+  details: {
+    critere: string;
+    valeurClient: string | number;
+    valeurRequise: string | number;
+    respecte: boolean;
+  }[];
+}
 
-// Messages storage
-export const messagesClients: Message[] = [];
+export function verifierEligibilite(
+  client: Client,
+  creditTypeId: string,
+  montantDemande: number,
+  creditsEnCours: CreditInterne[],
+  creditsBEAC: CreditBEAC[]
+): EligibilityResult {
+  const regle = reglesOctroi.find(r => r.creditTypeId === creditTypeId);
+  const creditType = typesCredit.find(t => t.id === creditTypeId);
+  
+  if (!regle || !creditType) {
+    return {
+      eligible: false,
+      raisons: ['Type de crédit non trouvé ou désactivé'],
+      score: 0,
+      details: [],
+    };
+  }
+
+  if (!regle.actif) {
+    return {
+      eligible: false,
+      raisons: [`Le ${creditType.label} est actuellement suspendu`],
+      score: 0,
+      details: [],
+    };
+  }
+
+  const raisons: string[] = [];
+  const details: EligibilityResult['details'] = [];
+  let score = 100;
+
+  // Vérifier le type de client
+  if (!regle.clientsEligibles.includes(client.type)) {
+    raisons.push(`Ce type de crédit n'est pas disponible pour les ${client.type === 'salarie' ? 'salariés' : client.type === 'independant' ? 'indépendants' : 'entreprises'}`);
+    score -= 100;
+  }
+
+  // Vérifications spécifiques selon le type de client
+  if (client.type === 'salarie') {
+    const salarie = client as ClientSalarie;
+    
+    // Âge
+    details.push({
+      critere: 'Âge',
+      valeurClient: salarie.age,
+      valeurRequise: `${regle.ageMin} - ${regle.ageMax} ans`,
+      respecte: salarie.age >= regle.ageMin && salarie.age <= regle.ageMax,
+    });
+    if (salarie.age < regle.ageMin || salarie.age > regle.ageMax) {
+      raisons.push(`Âge non conforme: ${salarie.age} ans (requis: ${regle.ageMin}-${regle.ageMax} ans)`);
+      score -= 20;
+    }
+
+    // Ancienneté emploi
+    details.push({
+      critere: 'Ancienneté emploi',
+      valeurClient: `${salarie.ancienneteEmploi} mois`,
+      valeurRequise: `${regle.ancienneteEmploiMin} mois minimum`,
+      respecte: salarie.ancienneteEmploi >= regle.ancienneteEmploiMin,
+    });
+    if (salarie.ancienneteEmploi < regle.ancienneteEmploiMin) {
+      raisons.push(`Ancienneté emploi insuffisante: ${salarie.ancienneteEmploi} mois (minimum requis: ${regle.ancienneteEmploiMin} mois)`);
+      score -= 15;
+    }
+
+    // Ancienneté banque
+    details.push({
+      critere: 'Ancienneté banque',
+      valeurClient: `${salarie.ancienneteBanque} mois`,
+      valeurRequise: `${regle.ancienneteBanqueMin} mois minimum`,
+      respecte: salarie.ancienneteBanque >= regle.ancienneteBanqueMin,
+    });
+    if (salarie.ancienneteBanque < regle.ancienneteBanqueMin) {
+      raisons.push(`Ancienneté banque insuffisante: ${salarie.ancienneteBanque} mois (minimum requis: ${regle.ancienneteBanqueMin} mois)`);
+      score -= 15;
+    }
+
+    // Revenu minimum
+    details.push({
+      critere: 'Revenu mensuel',
+      valeurClient: `${salarie.revenuNet.toLocaleString('fr-FR')} FCFA`,
+      valeurRequise: `${regle.revenuMin.toLocaleString('fr-FR')} FCFA minimum`,
+      respecte: salarie.revenuNet >= regle.revenuMin,
+    });
+    if (salarie.revenuNet < regle.revenuMin) {
+      raisons.push(`Revenu insuffisant: ${salarie.revenuNet.toLocaleString('fr-FR')} FCFA (minimum requis: ${regle.revenuMin.toLocaleString('fr-FR')} FCFA)`);
+      score -= 20;
+    }
+
+    // Taux d'endettement
+    const encoursTotalInterne = creditsEnCours.reduce((sum, c) => sum + c.mensualite, 0);
+    const encoursTotalBEAC = creditsBEAC.reduce((sum, c) => sum + (c.soldeRestant / 12), 0);
+    const tauxEndettement = ((encoursTotalInterne + encoursTotalBEAC) / salarie.revenuNet) * 100;
+    details.push({
+      critere: "Taux d'endettement",
+      valeurClient: `${tauxEndettement.toFixed(1)}%`,
+      valeurRequise: `${regle.tauxEndettementMax}% maximum`,
+      respecte: tauxEndettement <= regle.tauxEndettementMax,
+    });
+    if (tauxEndettement > regle.tauxEndettementMax) {
+      raisons.push(`Taux d'endettement trop élevé: ${tauxEndettement.toFixed(1)}% (maximum: ${regle.tauxEndettementMax}%)`);
+      score -= 25;
+    }
+
+  } else if (client.type === 'independant') {
+    const independant = client as ClientIndependant;
+    
+    // Âge
+    details.push({
+      critere: 'Âge',
+      valeurClient: independant.age,
+      valeurRequise: `${regle.ageMin} - ${regle.ageMax} ans`,
+      respecte: independant.age >= regle.ageMin && independant.age <= regle.ageMax,
+    });
+    if (independant.age < regle.ageMin || independant.age > regle.ageMax) {
+      raisons.push(`Âge non conforme: ${independant.age} ans (requis: ${regle.ageMin}-${regle.ageMax} ans)`);
+      score -= 20;
+    }
+
+    // Ancienneté activité
+    const ancienneteActivite = independant.ancienneteActivite || 0;
+    details.push({
+      critere: 'Ancienneté activité',
+      valeurClient: `${ancienneteActivite} mois`,
+      valeurRequise: `${regle.ancienneteActiviteMin} mois minimum`,
+      respecte: ancienneteActivite >= regle.ancienneteActiviteMin,
+    });
+    if (ancienneteActivite < regle.ancienneteActiviteMin) {
+      raisons.push(`Ancienneté activité insuffisante: ${ancienneteActivite} mois (minimum requis: ${regle.ancienneteActiviteMin} mois)`);
+      score -= 15;
+    }
+
+    // Ancienneté banque
+    details.push({
+      critere: 'Ancienneté banque',
+      valeurClient: `${independant.ancienneteBanque} mois`,
+      valeurRequise: `${regle.ancienneteBanqueMin} mois minimum`,
+      respecte: independant.ancienneteBanque >= regle.ancienneteBanqueMin,
+    });
+    if (independant.ancienneteBanque < regle.ancienneteBanqueMin) {
+      raisons.push(`Ancienneté banque insuffisante: ${independant.ancienneteBanque} mois (minimum requis: ${regle.ancienneteBanqueMin} mois)`);
+      score -= 15;
+    }
+
+    // Chiffre d'affaires minimum
+    details.push({
+      critere: "Chiffre d'affaires mensuel",
+      valeurClient: `${independant.chiffreAffaires.toLocaleString('fr-FR')} FCFA`,
+      valeurRequise: `${regle.caMin.toLocaleString('fr-FR')} FCFA minimum`,
+      respecte: independant.chiffreAffaires >= regle.caMin,
+    });
+    if (independant.chiffreAffaires < regle.caMin) {
+      raisons.push(`Chiffre d'affaires insuffisant: ${independant.chiffreAffaires.toLocaleString('fr-FR')} FCFA (minimum requis: ${regle.caMin.toLocaleString('fr-FR')} FCFA)`);
+      score -= 20;
+    }
+
+    // Marge minimum
+    details.push({
+      critere: 'Marge nette',
+      valeurClient: `${independant.margeNette}%`,
+      valeurRequise: `${regle.margeMin}% minimum`,
+      respecte: independant.margeNette >= regle.margeMin,
+    });
+    if (independant.margeNette < regle.margeMin) {
+      raisons.push(`Marge nette insuffisante: ${independant.margeNette}% (minimum requis: ${regle.margeMin}%)`);
+      score -= 15;
+    }
+  }
+
+  // Vérification du montant
+  details.push({
+    critere: 'Montant demandé',
+    valeurClient: `${montantDemande.toLocaleString('fr-FR')} FCFA`,
+    valeurRequise: `${regle.montantMin.toLocaleString('fr-FR')} - ${regle.montantMax.toLocaleString('fr-FR')} FCFA`,
+    respecte: montantDemande >= regle.montantMin && montantDemande <= regle.montantMax,
+  });
+  if (montantDemande < regle.montantMin) {
+    raisons.push(`Montant trop faible: ${montantDemande.toLocaleString('fr-FR')} FCFA (minimum: ${regle.montantMin.toLocaleString('fr-FR')} FCFA)`);
+    score -= 10;
+  }
+  if (montantDemande > regle.montantMax) {
+    raisons.push(`Montant trop élevé: ${montantDemande.toLocaleString('fr-FR')} FCFA (maximum: ${regle.montantMax.toLocaleString('fr-FR')} FCFA)`);
+    score -= 15;
+  }
+
+  // Score BEAC
+  const totalImpayesBEAC = creditsBEAC.reduce((sum, c) => sum + c.impayes, 0);
+  const scoreBEAC = totalImpayesBEAC === 0 ? 'A' : totalImpayesBEAC < 500000 ? 'B' : 'C';
+  const scoreRanking = { 'A': 3, 'B': 2, 'C': 1 };
+  details.push({
+    critere: 'Score BEAC',
+    valeurClient: scoreBEAC,
+    valeurRequise: `${regle.scoreBEACMin} minimum`,
+    respecte: scoreRanking[scoreBEAC] >= scoreRanking[regle.scoreBEACMin],
+  });
+  if (scoreRanking[scoreBEAC] < scoreRanking[regle.scoreBEACMin]) {
+    raisons.push(`Score BEAC insuffisant: ${scoreBEAC} (minimum requis: ${regle.scoreBEACMin})`);
+    score -= 30;
+  }
+
+  // KYC complet
+  details.push({
+    critere: 'Dossier KYC',
+    valeurClient: client.kycComplete ? 'Complet' : 'Incomplet',
+    valeurRequise: 'Complet',
+    respecte: client.kycComplete,
+  });
+  if (!client.kycComplete) {
+    raisons.push('Dossier KYC incomplet - Veuillez compléter la fiche client');
+    score -= 100;
+  }
+
+  return {
+    eligible: raisons.length === 0,
+    raisons,
+    score: Math.max(0, score),
+    details,
+  };
+}
+
+// Generate internal credits
+export function generateCreditsInterne(clientId: string): CreditInterne[] {
+  const count = Math.floor(Math.random() * 4);
+  const credits: CreditInterne[] = [];
+  
+  for (let i = 0; i < count; i++) {
+    const montant = Math.floor(Math.random() * 10000000 + 500000);
+    const encours = Math.floor(montant * (Math.random() * 0.7 + 0.1));
+    credits.push({
+      id: `ci_${clientId}_${i}`,
+      clientId,
+      dateOctroi: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000 * 3).toISOString().split('T')[0],
+      montantInitial: montant,
+      type: typesCredit[Math.floor(Math.random() * typesCredit.length)].label,
+      mensualite: Math.floor(montant / (Math.random() * 24 + 12)),
+      encours,
+      impayes: Math.random() > 0.8 ? Math.floor(Math.random() * 500000) : 0,
+      statut: Math.random() > 0.9 ? 'douteux' : Math.random() > 0.8 ? 'sensible' : 'sain',
+    });
+  }
+  
+  return credits;
+}
+
+// Generate BEAC credits
+export function generateCreditsBEAC(clientId: string): CreditBEAC[] {
+  const count = Math.floor(Math.random() * 3);
+  const banques = ['BICEC', 'SGBC', 'UBA', 'Afriland', 'Ecobank', 'SCB'];
+  const credits: CreditBEAC[] = [];
+  
+  for (let i = 0; i < count; i++) {
+    const montant = Math.floor(Math.random() * 15000000 + 1000000);
+    credits.push({
+      id: `cb_${clientId}_${i}`,
+      clientId,
+      banque: banques[Math.floor(Math.random() * banques.length)],
+      typeEngagement: ['Crédit', 'Découvert', 'Caution'][Math.floor(Math.random() * 3)],
+      montantInitial: montant,
+      soldeRestant: Math.floor(montant * (Math.random() * 0.8 + 0.1)),
+      impayes: Math.random() > 0.85 ? Math.floor(Math.random() * 1000000) : 0,
+      joursRetard: Math.random() > 0.85 ? Math.floor(Math.random() * 90) : 0,
+      statut: Math.random() > 0.9 ? 'compromis' : Math.random() > 0.8 ? 'douteux' : 'sain',
+    });
+  }
+  
+  return credits;
+}
