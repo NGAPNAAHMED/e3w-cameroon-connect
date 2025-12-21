@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
 import {
@@ -23,17 +24,29 @@ import {
   Shield,
   Users,
   AlertTriangle,
-  Lock,
   Bell,
   FileText,
   Calculator,
-  Building2,
+  Eye,
+  BarChart3,
+  Calendar,
+  Banknote,
+  Clock,
+  CheckCircle2,
   Edit,
-  Check,
-  X,
 } from 'lucide-react';
-import { typesCredit } from '@/data/mockData';
+import { typesCredit, reglesOctroi, RegleOctroi } from '@/data/mockData';
 import { formatXAF, formatPourcentage } from '@/lib/formatters';
+
+// Helper pour formater les montants avec séparateurs
+const formatMontantInput = (value: string): string => {
+  const num = value.replace(/\s/g, '').replace(/\D/g, '');
+  return num.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+};
+
+const parseMontant = (value: string): number => {
+  return parseInt(value.replace(/\s/g, '')) || 0;
+};
 
 interface CreditType {
   id: string;
@@ -46,36 +59,44 @@ interface CreditType {
   dureeMax: number;
   differeMax: number;
   garantieObligatoire: boolean;
+  nbOctrois: number;
+  montantTotal: number;
 }
 
 export default function AdminParametres() {
   const { addNotification } = useNotifications();
   const [activeTab, setActiveTab] = useState('credits');
+  const [selectedCreditForRules, setSelectedCreditForRules] = useState<string | null>(null);
   
-  const [credits, setCredits] = useState<CreditType[]>(typesCredit.map(c => ({
+  const [credits, setCredits] = useState<CreditType[]>(typesCredit.map((c, i) => ({
     ...c,
     actif: true,
-    plafondMin: 100000,
-    plafondMax: 50000000,
-    dureeMin: 3,
-    dureeMax: 84,
-    differeMax: 6,
-    garantieObligatoire: c.id === 'immo',
+    plafondMin: reglesOctroi.find(r => r.creditTypeId === c.id)?.montantMin || 100000,
+    plafondMax: reglesOctroi.find(r => r.creditTypeId === c.id)?.montantMax || 50000000,
+    dureeMin: reglesOctroi.find(r => r.creditTypeId === c.id)?.dureeMin || 3,
+    dureeMax: reglesOctroi.find(r => r.creditTypeId === c.id)?.dureeMax || 84,
+    differeMax: reglesOctroi.find(r => r.creditTypeId === c.id)?.differeMax || 6,
+    garantieObligatoire: reglesOctroi.find(r => r.creditTypeId === c.id)?.garantieObligatoire || false,
+    nbOctrois: [145, 89, 34, 56, 23, 67, 45, 28][i] || Math.floor(Math.random() * 100 + 20),
+    montantTotal: [725000000, 267000000, 510000000, 336000000, 115000000, 134000000, 225000000, 84000000][i] || Math.floor(Math.random() * 500000000 + 50000000),
   })));
 
-  const [editingCredit, setEditingCredit] = useState<string | null>(null);
+  const [editingRegle, setEditingRegle] = useState<RegleOctroi | null>(null);
   const [newCreditName, setNewCreditName] = useState('');
 
-  // Règles globales
-  const [regles, setRegles] = useState({
+  // Règles globales d'éligibilité
+  const [reglesGlobales, setReglesGlobales] = useState({
     tauxEndettementMax: 33,
     ancienneteEmploiMin: 6,
     ancienneteBanqueMin: 3,
+    ancienneteActiviteMin: 12,
     scoreMinBEAC: 'B',
     ageMin: 21,
     ageMax: 65,
     revenusMinSalarie: 100000,
     caMinIndependant: 500000,
+    margeMinIndependant: 10,
+    epargnePrealableMin: 10,
     validationDouble: true,
     notificationAuto: true,
   });
@@ -89,16 +110,6 @@ export default function AdminParametres() {
     impayeDetecte: true,
     rappelRdv: true,
   });
-
-  // Stats
-  const stats = [
-    { type: 'Crédit Consommation', count: 145, montant: 725000000, taux: 12 },
-    { type: 'Crédit Scolaire', count: 89, montant: 267000000, taux: 8.5 },
-    { type: 'Crédit Immobilier', count: 34, montant: 510000000, taux: 7.5 },
-    { type: 'Crédit Auto', count: 56, montant: 336000000, taux: 10.5 },
-    { type: 'Crédit Équipement', count: 23, montant: 115000000, taux: 9 },
-    { type: 'Crédit Trésorerie', count: 67, montant: 134000000, taux: 14 },
-  ];
 
   const handleToggleCredit = (id: string) => {
     setCredits(prev => prev.map(c => 
@@ -142,6 +153,8 @@ export default function AdminParametres() {
       dureeMax: 36,
       differeMax: 3,
       garantieObligatoire: false,
+      nbOctrois: 0,
+      montantTotal: 0,
     };
     
     setCredits(prev => [...prev, newCredit]);
@@ -180,6 +193,12 @@ export default function AdminParametres() {
     });
   };
 
+  // Crédits actifs uniquement pour l'affichage
+  const creditsActifs = credits.filter(c => c.actif);
+  const creditsInactifs = credits.filter(c => !c.actif);
+  const totalOctrois = credits.reduce((s, c) => s + c.nbOctrois, 0);
+  const totalVolume = credits.reduce((s, c) => s + c.montantTotal, 0);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -199,9 +218,9 @@ export default function AdminParametres() {
             <CreditCard className="w-4 h-4 mr-2" />
             Types de Crédit
           </TabsTrigger>
-          <TabsTrigger value="regles" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+          <TabsTrigger value="eligibilite" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Shield className="w-4 h-4 mr-2" />
-            Règles Globales
+            Éligibilité
           </TabsTrigger>
           <TabsTrigger value="notifications" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Bell className="w-4 h-4 mr-2" />
@@ -233,119 +252,56 @@ export default function AdminParametres() {
             </CardContent>
           </Card>
 
-          {/* Credits List */}
-          <div className="grid gap-4">
-            {credits.map(credit => (
-              <Card key={credit.id} className={`glass-card transition-all ${!credit.actif ? 'opacity-60' : ''}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    {/* Status & Name */}
-                    <div className="flex items-center gap-3 w-48">
-                      <Switch
-                        checked={credit.actif}
-                        onCheckedChange={() => handleToggleCredit(credit.id)}
-                      />
-                      {credit.actif ? (
-                        <PlayCircle className="w-5 h-5 text-success" />
-                      ) : (
-                        <PauseCircle className="w-5 h-5 text-muted-foreground" />
-                      )}
-                      <span className="font-semibold">{credit.label}</span>
-                    </div>
-
-                    {/* Taux */}
-                    <div className="w-32">
-                      <Label className="text-xs text-muted-foreground">Taux (%)</Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          step="0.5"
-                          value={credit.taux}
-                          onChange={(e) => handleUpdateTaux(credit.id, parseFloat(e.target.value))}
-                          className="input-dark h-8"
-                          disabled={!credit.actif}
-                        />
-                        <Percent className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                    </div>
-
-                    {/* Plafond Min */}
-                    <div className="w-36">
-                      <Label className="text-xs text-muted-foreground">Plafond Min (FCFA)</Label>
-                      <Input
-                        type="number"
-                        value={credit.plafondMin}
-                        onChange={(e) => handleUpdatePlafond(credit.id, 'plafondMin', parseInt(e.target.value))}
-                        className="input-dark h-8"
-                        disabled={!credit.actif}
-                      />
-                    </div>
-
-                    {/* Plafond Max */}
-                    <div className="w-36">
-                      <Label className="text-xs text-muted-foreground">Plafond Max (FCFA)</Label>
-                      <Input
-                        type="number"
-                        value={credit.plafondMax}
-                        onChange={(e) => handleUpdatePlafond(credit.id, 'plafondMax', parseInt(e.target.value))}
-                        className="input-dark h-8"
-                        disabled={!credit.actif}
-                      />
-                    </div>
-
-                    {/* Durée */}
-                    <div className="w-24">
-                      <Label className="text-xs text-muted-foreground">Durée max</Label>
-                      <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
-                          value={credit.dureeMax}
-                          className="input-dark h-8 w-16"
-                          disabled={!credit.actif}
-                        />
-                        <span className="text-xs text-muted-foreground">mois</span>
-                      </div>
-                    </div>
-
-                    {/* Garantie */}
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={credit.garantieObligatoire}
-                        disabled={!credit.actif}
-                        onCheckedChange={(checked) => {
-                          setCredits(prev => prev.map(c => 
-                            c.id === credit.id ? { ...c, garantieObligatoire: checked } : c
-                          ));
-                        }}
-                      />
-                      <Label className="text-xs">Garantie obligatoire</Label>
-                    </div>
-
-                    {/* Actions */}
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="text-destructive hover:text-destructive ml-auto"
-                      onClick={() => handleDeleteCredit(credit.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Credits actifs */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <PlayCircle className="w-4 h-4 text-success" />
+              Crédits Actifs ({creditsActifs.length})
+            </h3>
+            {creditsActifs.map(credit => (
+              <CreditTypeCard 
+                key={credit.id} 
+                credit={credit}
+                onToggle={() => handleToggleCredit(credit.id)}
+                onUpdateTaux={(t) => handleUpdateTaux(credit.id, t)}
+                onUpdatePlafond={(f, v) => handleUpdatePlafond(credit.id, f, v)}
+                onDelete={() => handleDeleteCredit(credit.id)}
+                onViewRules={() => setSelectedCreditForRules(credit.id)}
+              />
             ))}
           </div>
+
+          {/* Credits inactifs */}
+          {creditsInactifs.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <PauseCircle className="w-4 h-4 text-muted-foreground" />
+                Crédits Suspendus ({creditsInactifs.length})
+              </h3>
+              {creditsInactifs.map(credit => (
+                <CreditTypeCard 
+                  key={credit.id} 
+                  credit={credit}
+                  onToggle={() => handleToggleCredit(credit.id)}
+                  onUpdateTaux={(t) => handleUpdateTaux(credit.id, t)}
+                  onUpdatePlafond={(f, v) => handleUpdatePlafond(credit.id, f, v)}
+                  onDelete={() => handleDeleteCredit(credit.id)}
+                  onViewRules={() => setSelectedCreditForRules(credit.id)}
+                />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
-        {/* Règles Globales */}
-        <TabsContent value="regles" className="space-y-6">
+        {/* Conditions d'Éligibilité */}
+        <TabsContent value="eligibilite" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Conditions d'éligibilité */}
+            {/* Conditions générales */}
             <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="w-5 h-5 text-primary" />
-                  Conditions d'Éligibilité
+                  Conditions Générales d'Éligibilité
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -353,50 +309,15 @@ export default function AdminParametres() {
                   <Label>Taux d'endettement maximum (%)</Label>
                   <div className="flex items-center gap-4">
                     <Slider
-                      value={[regles.tauxEndettementMax]}
-                      onValueChange={([v]) => setRegles(p => ({...p, tauxEndettementMax: v}))}
+                      value={[reglesGlobales.tauxEndettementMax]}
+                      onValueChange={([v]) => setReglesGlobales(p => ({...p, tauxEndettementMax: v}))}
                       max={50}
                       min={20}
                       step={1}
                       className="flex-1"
                     />
-                    <Badge variant="outline" className="w-16 justify-center">{regles.tauxEndettementMax}%</Badge>
+                    <Badge variant="outline" className="w-16 justify-center">{reglesGlobales.tauxEndettementMax}%</Badge>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm">Ancienneté emploi min (mois)</Label>
-                    <Input
-                      type="number"
-                      value={regles.ancienneteEmploiMin}
-                      onChange={(e) => setRegles(p => ({...p, ancienneteEmploiMin: parseInt(e.target.value)}))}
-                      className="input-dark"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm">Ancienneté banque min (mois)</Label>
-                    <Input
-                      type="number"
-                      value={regles.ancienneteBanqueMin}
-                      onChange={(e) => setRegles(p => ({...p, ancienneteBanqueMin: parseInt(e.target.value)}))}
-                      className="input-dark"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm">Score BEAC minimum</Label>
-                  <Select value={regles.scoreMinBEAC} onValueChange={(v) => setRegles(p => ({...p, scoreMinBEAC: v}))}>
-                    <SelectTrigger className="input-dark">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="A">A - Excellent</SelectItem>
-                      <SelectItem value="B">B - Bon</SelectItem>
-                      <SelectItem value="C">C - Acceptable</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -404,8 +325,8 @@ export default function AdminParametres() {
                     <Label className="text-sm">Âge minimum</Label>
                     <Input
                       type="number"
-                      value={regles.ageMin}
-                      onChange={(e) => setRegles(p => ({...p, ageMin: parseInt(e.target.value)}))}
+                      value={reglesGlobales.ageMin}
+                      onChange={(e) => setReglesGlobales(p => ({...p, ageMin: parseInt(e.target.value)}))}
                       className="input-dark"
                     />
                   </div>
@@ -413,10 +334,79 @@ export default function AdminParametres() {
                     <Label className="text-sm">Âge maximum</Label>
                     <Input
                       type="number"
-                      value={regles.ageMax}
-                      onChange={(e) => setRegles(p => ({...p, ageMax: parseInt(e.target.value)}))}
+                      value={reglesGlobales.ageMax}
+                      onChange={(e) => setReglesGlobales(p => ({...p, ageMax: parseInt(e.target.value)}))}
                       className="input-dark"
                     />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm">Score BEAC minimum</Label>
+                  <Select value={reglesGlobales.scoreMinBEAC} onValueChange={(v) => setReglesGlobales(p => ({...p, scoreMinBEAC: v}))}>
+                    <SelectTrigger className="input-dark">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="A">A - Excellent (Aucun impayé)</SelectItem>
+                      <SelectItem value="B">B - Bon (Impayés {'<'} 500 000 FCFA)</SelectItem>
+                      <SelectItem value="C">C - Acceptable (Impayés {'<'} 1 000 000 FCFA)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Ancienneté requise */}
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  Ancienneté Requise
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Ancienneté emploi min (mois)</Label>
+                    <Input
+                      type="number"
+                      value={reglesGlobales.ancienneteEmploiMin}
+                      onChange={(e) => setReglesGlobales(p => ({...p, ancienneteEmploiMin: parseInt(e.target.value)}))}
+                      className="input-dark"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Ancienneté banque min (mois)</Label>
+                    <Input
+                      type="number"
+                      value={reglesGlobales.ancienneteBanqueMin}
+                      onChange={(e) => setReglesGlobales(p => ({...p, ancienneteBanqueMin: parseInt(e.target.value)}))}
+                      className="input-dark"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Ancienneté activité min - Indépendants (mois)</Label>
+                  <Input
+                    type="number"
+                    value={reglesGlobales.ancienneteActiviteMin}
+                    onChange={(e) => setReglesGlobales(p => ({...p, ancienneteActiviteMin: parseInt(e.target.value)}))}
+                    className="input-dark"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Épargne préalable minimum (%)</Label>
+                  <div className="flex items-center gap-4">
+                    <Slider
+                      value={[reglesGlobales.epargnePrealableMin]}
+                      onValueChange={([v]) => setReglesGlobales(p => ({...p, epargnePrealableMin: v}))}
+                      max={30}
+                      min={0}
+                      step={5}
+                      className="flex-1"
+                    />
+                    <Badge variant="outline" className="w-16 justify-center">{reglesGlobales.epargnePrealableMin}%</Badge>
                   </div>
                 </div>
               </CardContent>
@@ -426,7 +416,7 @@ export default function AdminParametres() {
             <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Calculator className="w-5 h-5 text-primary" />
+                  <Banknote className="w-5 h-5 text-primary" />
                   Revenus Minimums
                 </CardTitle>
               </CardHeader>
@@ -434,44 +424,65 @@ export default function AdminParametres() {
                 <div className="space-y-2">
                   <Label className="text-sm">Revenu net min - Salariés (FCFA)</Label>
                   <Input
-                    type="number"
-                    value={regles.revenusMinSalarie}
-                    onChange={(e) => setRegles(p => ({...p, revenusMinSalarie: parseInt(e.target.value)}))}
-                    className="input-dark"
+                    value={formatMontantInput(String(reglesGlobales.revenusMinSalarie))}
+                    onChange={(e) => setReglesGlobales(p => ({...p, revenusMinSalarie: parseMontant(e.target.value)}))}
+                    className="input-dark number-format"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-sm">CA mensuel min - Indépendants (FCFA)</Label>
                   <Input
-                    type="number"
-                    value={regles.caMinIndependant}
-                    onChange={(e) => setRegles(p => ({...p, caMinIndependant: parseInt(e.target.value)}))}
-                    className="input-dark"
+                    value={formatMontantInput(String(reglesGlobales.caMinIndependant))}
+                    onChange={(e) => setReglesGlobales(p => ({...p, caMinIndependant: parseMontant(e.target.value)}))}
+                    className="input-dark number-format"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Marge nette min - Indépendants (%)</Label>
+                  <div className="flex items-center gap-4">
+                    <Slider
+                      value={[reglesGlobales.margeMinIndependant]}
+                      onValueChange={([v]) => setReglesGlobales(p => ({...p, margeMinIndependant: v}))}
+                      max={30}
+                      min={5}
+                      step={1}
+                      className="flex-1"
+                    />
+                    <Badge variant="outline" className="w-16 justify-center">{reglesGlobales.margeMinIndependant}%</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                <div className="pt-4 border-t border-border space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-sm">Double validation comité</Label>
-                      <p className="text-xs text-muted-foreground">Requiert 2 validations pour les gros montants</p>
-                    </div>
-                    <Switch
-                      checked={regles.validationDouble}
-                      onCheckedChange={(checked) => setRegles(p => ({...p, validationDouble: checked}))}
-                    />
+            {/* Options avancées */}
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-primary" />
+                  Options Avancées
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <div>
+                    <Label className="text-sm">Double validation comité</Label>
+                    <p className="text-xs text-muted-foreground">Requiert 2 validations pour les gros montants</p>
                   </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-sm">Notifications automatiques</Label>
-                      <p className="text-xs text-muted-foreground">Alertes aux gestionnaires</p>
-                    </div>
-                    <Switch
-                      checked={regles.notificationAuto}
-                      onCheckedChange={(checked) => setRegles(p => ({...p, notificationAuto: checked}))}
-                    />
+                  <Switch
+                    checked={reglesGlobales.validationDouble}
+                    onCheckedChange={(checked) => setReglesGlobales(p => ({...p, validationDouble: checked}))}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <div>
+                    <Label className="text-sm">Notifications automatiques</Label>
+                    <p className="text-xs text-muted-foreground">Alertes aux gestionnaires et clients</p>
                   </div>
+                  <Switch
+                    checked={reglesGlobales.notificationAuto}
+                    onCheckedChange={(checked) => setReglesGlobales(p => ({...p, notificationAuto: checked}))}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -516,33 +527,67 @@ export default function AdminParametres() {
             <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
+                  <BarChart3 className="w-5 h-5 text-primary" />
                   Performance par Type de Crédit
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {stats.map((stat, index) => {
-                  const maxMontant = Math.max(...stats.map(s => s.montant));
-                  const percentage = (stat.montant / maxMontant) * 100;
+                {credits.sort((a, b) => b.montantTotal - a.montantTotal).map((credit) => {
+                  const maxMontant = Math.max(...credits.map(c => c.montantTotal));
+                  const percentage = (credit.montantTotal / maxMontant) * 100;
                   
                   return (
-                    <div key={index} className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium">{stat.type}</span>
-                        <div className="flex items-center gap-4">
-                          <Badge variant="outline">{stat.count} octroyés</Badge>
-                          <span className="text-primary font-semibold number-format w-32 text-right">
-                            {formatXAF(stat.montant)}
-                          </span>
+                    <Dialog key={credit.id}>
+                      <DialogTrigger asChild>
+                        <div className="space-y-2 cursor-pointer hover:bg-muted/30 p-2 rounded-lg transition-colors">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium flex items-center gap-2">
+                              {credit.actif ? (
+                                <CheckCircle2 className="w-3 h-3 text-success" />
+                              ) : (
+                                <PauseCircle className="w-3 h-3 text-muted-foreground" />
+                              )}
+                              {credit.label}
+                            </span>
+                            <div className="flex items-center gap-4">
+                              <Badge variant="outline">{credit.nbOctrois} octroyés</Badge>
+                              <span className="text-primary font-semibold number-format w-36 text-right">
+                                {formatXAF(credit.montantTotal)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all ${credit.actif ? 'bg-gradient-to-r from-primary to-primary/60' : 'bg-muted-foreground/30'}`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                      <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full transition-all"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Détails - {credit.label}</DialogTitle>
+                        </DialogHeader>
+                        <div className="grid grid-cols-2 gap-4 mt-4">
+                          <div className="p-4 rounded-lg bg-muted/50 text-center">
+                            <p className="text-2xl font-bold text-primary">{credit.nbOctrois}</p>
+                            <p className="text-sm text-muted-foreground">Crédits octroyés</p>
+                          </div>
+                          <div className="p-4 rounded-lg bg-muted/50 text-center">
+                            <p className="text-lg font-bold text-primary number-format">{formatXAF(credit.montantTotal)}</p>
+                            <p className="text-sm text-muted-foreground">Volume total</p>
+                          </div>
+                          <div className="p-4 rounded-lg bg-muted/50 text-center">
+                            <p className="text-2xl font-bold">{formatPourcentage(credit.taux)}</p>
+                            <p className="text-sm text-muted-foreground">Taux d'intérêt</p>
+                          </div>
+                          <div className="p-4 rounded-lg bg-muted/50 text-center">
+                            <p className="text-lg font-bold number-format">{formatXAF(Math.floor(credit.montantTotal / credit.nbOctrois))}</p>
+                            <p className="text-sm text-muted-foreground">Montant moyen</p>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   );
                 })}
               </CardContent>
@@ -558,11 +603,11 @@ export default function AdminParametres() {
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 rounded-lg bg-muted/50 text-center">
-                    <p className="text-3xl font-bold text-primary">{stats.reduce((s, c) => s + c.count, 0)}</p>
+                    <p className="text-3xl font-bold text-primary">{totalOctrois}</p>
                     <p className="text-sm text-muted-foreground">Total Crédits Octroyés</p>
                   </div>
                   <div className="p-4 rounded-lg bg-muted/50 text-center">
-                    <p className="text-xl font-bold text-primary number-format">{formatXAF(stats.reduce((s, c) => s + c.montant, 0))}</p>
+                    <p className="text-xl font-bold text-primary number-format">{formatXAF(totalVolume)}</p>
                     <p className="text-sm text-muted-foreground">Volume Total</p>
                   </div>
                   <div className="p-4 rounded-lg bg-muted/50 text-center">
@@ -580,5 +625,94 @@ export default function AdminParametres() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Composant pour les cartes de type de crédit
+function CreditTypeCard({ 
+  credit, 
+  onToggle, 
+  onUpdateTaux, 
+  onUpdatePlafond, 
+  onDelete,
+  onViewRules 
+}: { 
+  credit: CreditType;
+  onToggle: () => void;
+  onUpdateTaux: (taux: number) => void;
+  onUpdatePlafond: (field: 'plafondMin' | 'plafondMax', value: number) => void;
+  onDelete: () => void;
+  onViewRules: () => void;
+}) {
+  return (
+    <Card className={`glass-card transition-all ${!credit.actif ? 'opacity-60 border-dashed' : ''}`}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Status & Name */}
+          <div className="flex items-center gap-3 min-w-48">
+            <Switch checked={credit.actif} onCheckedChange={onToggle} />
+            {credit.actif ? (
+              <PlayCircle className="w-5 h-5 text-success" />
+            ) : (
+              <PauseCircle className="w-5 h-5 text-muted-foreground" />
+            )}
+            <span className="font-semibold">{credit.label}</span>
+          </div>
+
+          {/* Taux */}
+          <div className="w-28">
+            <Label className="text-xs text-muted-foreground">Taux (%)</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                step="0.5"
+                value={credit.taux}
+                onChange={(e) => onUpdateTaux(parseFloat(e.target.value))}
+                className="input-dark h-8"
+                disabled={!credit.actif}
+              />
+              <Percent className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </div>
+
+          {/* Plafond Min */}
+          <div className="w-40">
+            <Label className="text-xs text-muted-foreground">Plafond Min</Label>
+            <Input
+              value={formatMontantInput(String(credit.plafondMin))}
+              onChange={(e) => onUpdatePlafond('plafondMin', parseMontant(e.target.value))}
+              className="input-dark h-8 number-format"
+              disabled={!credit.actif}
+            />
+          </div>
+
+          {/* Plafond Max */}
+          <div className="w-40">
+            <Label className="text-xs text-muted-foreground">Plafond Max</Label>
+            <Input
+              value={formatMontantInput(String(credit.plafondMax))}
+              onChange={(e) => onUpdatePlafond('plafondMax', parseMontant(e.target.value))}
+              className="input-dark h-8 number-format"
+              disabled={!credit.actif}
+            />
+          </div>
+
+          {/* Stats */}
+          <div className="flex items-center gap-2 ml-auto">
+            <Badge variant="outline" className="text-xs">
+              {credit.nbOctrois} octrois
+            </Badge>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
