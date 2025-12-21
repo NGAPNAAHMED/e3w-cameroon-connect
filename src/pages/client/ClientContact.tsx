@@ -18,7 +18,25 @@ import {
   CheckCircle2,
   Clock,
 } from 'lucide-react';
-import { staff, messagesPredefinis } from '@/data/mockData';
+import { staff } from '@/data/mockData';
+
+// Messages prédéfinis pour les clients
+const messagesPredefinis = {
+  demande_pret: [
+    { sujet: "Demande de crédit consommation", contenu: "Je souhaite obtenir un crédit consommation pour financer un projet personnel.", reponseAuto: "Votre demande a été enregistrée. Un gestionnaire vous contactera sous 24h pour étudier votre dossier." },
+    { sujet: "Demande de crédit scolaire", contenu: "Je souhaite financer la scolarité de mes enfants pour la rentrée.", reponseAuto: "Votre demande de crédit scolaire a été reçue. Préparez vos bulletins de salaire et justificatifs de scolarité." },
+    { sujet: "Demande de crédit immobilier", contenu: "Je souhaite acquérir un bien immobilier et demande un financement.", reponseAuto: "Pour le crédit immobilier, veuillez préparer le titre foncier et l'évaluation du bien. RDV à prendre." },
+  ],
+  probleme: [
+    { sujet: "Problème de prélèvement", contenu: "Mon prélèvement automatique n'a pas fonctionné ce mois-ci.", reponseAuto: "Nous avons bien reçu votre signalement. Un conseiller analysera votre compte sous 48h." },
+    { sujet: "Contestation de frais", contenu: "Je conteste des frais prélevés sur mon compte.", reponseAuto: "Votre réclamation est en cours d'examen. Réponse sous 5 jours ouvrés." },
+    { sujet: "Difficulté de remboursement", contenu: "Je rencontre des difficultés pour rembourser mon crédit en cours.", reponseAuto: "Un conseiller vous contactera pour étudier un réaménagement de votre échéancier." },
+  ],
+  rdv: [
+    { sujet: "Demande de rendez-vous", contenu: "Je souhaite prendre rendez-vous avec mon gestionnaire.", reponseAuto: "Votre demande de RDV a été transmise. Vous serez recontacté pour confirmation du créneau." },
+    { sujet: "Modifier un rendez-vous", contenu: "Je souhaite modifier la date de mon prochain rendez-vous.", reponseAuto: "Votre demande de modification a été enregistrée. Confirmation sous 24h." },
+  ],
+};
 import { getInitials } from '@/lib/formatters';
 
 interface MessagePredefini {
