@@ -45,6 +45,7 @@ import {
   Plus,
   Calendar,
   Calculator,
+  Trash2,
 } from 'lucide-react';
 import { 
   clients, companies, typesCredit, typesGarantie, generateCreditsInterne, generateCreditsBEAC, 
@@ -56,6 +57,12 @@ import { cn } from '@/lib/utils';
 // Helper pour formater les montants
 const formatMontantDisplay = (value: number): string => {
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+};
+
+// Helper pour obtenir le nom du mois en français
+const getMonthName = (date: Date): string => {
+  const months = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  return months[date.getMonth()];
 };
 
 // Eligibility Check Dialog with Animation
@@ -418,7 +425,7 @@ function KYCDetailsDialog({ client }: { client: Client }) {
   );
 }
 
-// Amortization Plan Dialog
+// Amortization Plan Dialog with months instead of numbers
 function AmortizationPlanDialog({ 
   montant, 
   taux, 
@@ -436,13 +443,17 @@ function AmortizationPlanDialog({
     const plan = [];
     let solde = montant;
     const tauxMensuel = taux / 100 / 12;
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() + 1); // Commence le mois prochain
     
     // Période de différé (intérêts seulement)
-    for (let i = 1; i <= differe; i++) {
+    for (let i = 0; i < differe; i++) {
+      const currentDate = new Date(startDate);
+      currentDate.setMonth(currentDate.getMonth() + i);
       const interets = Math.round(solde * tauxMensuel);
       plan.push({
-        echeance: i,
-        date: new Date(Date.now() + i * 30 * 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR'),
+        echeance: i + 1,
+        mois: `${getMonthName(currentDate)} ${currentDate.getFullYear()}`,
         capital: 0,
         interets,
         mensualite: interets,
@@ -452,13 +463,15 @@ function AmortizationPlanDialog({
     }
     
     // Période de remboursement normal
-    for (let i = 1; i <= duree; i++) {
+    for (let i = 0; i < duree; i++) {
+      const currentDate = new Date(startDate);
+      currentDate.setMonth(currentDate.getMonth() + differe + i);
       const interets = Math.round(solde * tauxMensuel);
       const capital = mensualite - interets;
       solde = Math.max(0, solde - capital);
       plan.push({
-        echeance: differe + i,
-        date: new Date(Date.now() + (differe + i) * 30 * 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR'),
+        echeance: differe + i + 1,
+        mois: `${getMonthName(currentDate)} ${currentDate.getFullYear()}`,
         capital: Math.round(capital),
         interets,
         mensualite,
@@ -507,7 +520,7 @@ function AmortizationPlanDialog({
           <TableHeader className="sticky top-0 bg-primary text-primary-foreground">
             <TableRow>
               <TableHead className="text-primary-foreground">N°</TableHead>
-              <TableHead className="text-primary-foreground">Date</TableHead>
+              <TableHead className="text-primary-foreground">Période</TableHead>
               <TableHead className="text-primary-foreground text-right">Capital</TableHead>
               <TableHead className="text-primary-foreground text-right">Intérêts</TableHead>
               <TableHead className="text-primary-foreground text-right">Mensualité</TableHead>
@@ -519,7 +532,7 @@ function AmortizationPlanDialog({
             {plan.map((row, idx) => (
               <TableRow key={row.echeance} className={idx % 2 === 0 ? 'bg-muted/30' : ''}>
                 <TableCell className="font-medium">{row.echeance}</TableCell>
-                <TableCell>{row.date}</TableCell>
+                <TableCell>{row.mois}</TableCell>
                 <TableCell className="text-right">{formatMontantDisplay(row.capital)}</TableCell>
                 <TableCell className="text-right">{formatMontantDisplay(row.interets)}</TableCell>
                 <TableCell className="text-right font-medium">{formatMontantDisplay(row.mensualite)}</TableCell>
@@ -719,7 +732,15 @@ export default function CockpitTraitement() {
 
     toast({
       title: "Garantie ajoutée",
-      description: `${typeGarantie?.label} enregistrée`,
+      description: `${typeGarantie?.label} enregistrée. Vous pouvez ajouter une autre garantie.`,
+    });
+  };
+
+  const handleRemoveGarantie = (id: string) => {
+    setGarantiesSaved(prev => prev.filter(g => g.id !== id));
+    toast({
+      title: "Garantie supprimée",
+      description: "La garantie a été retirée de la liste",
     });
   };
 
@@ -881,7 +902,7 @@ export default function CockpitTraitement() {
   const totalGarantiesValue = garantiesSaved.reduce((sum, g) => sum + g.valeurEstimee, 0);
 
   return (
-    <div className="h-[calc(100vh-5rem)] flex flex-col animate-fade-in overflow-hidden">
+    <div className="h-[calc(100vh-4rem)] flex flex-col animate-fade-in overflow-hidden p-1">
       {/* Header */}
       <div className="flex items-center gap-4 mb-1 flex-shrink-0">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
@@ -924,12 +945,12 @@ export default function CockpitTraitement() {
       )}
 
       {/* Main Grid - NO SCROLL */}
-      <div className="flex-1 grid grid-rows-2 gap-1.5 min-h-0">
+      <div className="flex-1 grid grid-rows-2 gap-1 min-h-0">
         {/* Row 1: Zone A (1/3) + Zones B & C (2/3) */}
-        <div className="grid grid-cols-3 gap-1.5 min-h-0">
+        <div className="grid grid-cols-3 gap-1 min-h-0">
           {/* Zone A - Client Synthèse */}
-          <Card className="border-2 border-primary/30 overflow-hidden flex flex-col bg-card">
-            <div className="bg-primary/10 px-3 py-1.5 flex items-center gap-2 font-semibold text-sm border-b border-primary/20">
+          <Card className="border-4 border-primary/50 overflow-hidden flex flex-col bg-card shadow-lg">
+            <div className="bg-primary/20 px-3 py-1.5 flex items-center gap-2 font-bold text-sm border-b-2 border-primary/30">
               {client.type === 'salarie' ? <Users className="w-4 h-4 text-primary" /> : 
                client.type === 'independant' ? <Briefcase className="w-4 h-4 text-primary" /> : 
                <Building2 className="w-4 h-4 text-primary" />}
@@ -938,7 +959,7 @@ export default function CockpitTraitement() {
             <div className="flex-1 p-2 overflow-hidden">
               <ZoneClientSynthese client={client} />
             </div>
-            <div className="p-2 border-t border-border">
+            <div className="p-2 border-t-2 border-primary/30">
               <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm" className="w-full">
@@ -952,11 +973,11 @@ export default function CockpitTraitement() {
           </Card>
 
           {/* Zones B & C */}
-          <div className="col-span-2 grid grid-rows-2 gap-1.5 min-h-0">
+          <div className="col-span-2 grid grid-rows-2 gap-1 min-h-0">
             {/* Zone B - Banque Interne */}
-            <Card className="border-2 border-primary/30 overflow-hidden flex flex-col bg-card">
-              <div className="bg-primary/10 px-3 py-1.5 flex items-center gap-2 font-semibold text-sm border-b border-primary/20">
-                <Landmark className="w-4 h-4 text-primary" />
+            <Card className="border-4 border-info/50 overflow-hidden flex flex-col bg-card shadow-lg">
+              <div className="bg-info/20 px-3 py-1.5 flex items-center gap-2 font-bold text-sm border-b-2 border-info/30">
+                <Landmark className="w-4 h-4 text-info" />
                 <span>Zone B - Données Bancaires Internes</span>
               </div>
               <div className="flex-1 p-2">
@@ -975,8 +996,8 @@ export default function CockpitTraitement() {
             </Card>
 
             {/* Zone C - Centrale des Risques */}
-            <Card className="border-2 border-warning/30 overflow-hidden flex flex-col bg-card">
-              <div className="bg-warning/10 px-3 py-1.5 flex items-center gap-2 font-semibold text-sm border-b border-warning/20">
+            <Card className="border-4 border-warning/50 overflow-hidden flex flex-col bg-card shadow-lg">
+              <div className="bg-warning/20 px-3 py-1.5 flex items-center gap-2 font-bold text-sm border-b-2 border-warning/30">
                 <AlertTriangle className="w-4 h-4 text-warning" />
                 <span>Zone C - Centrale des Risques (BEAC)</span>
               </div>
@@ -1001,8 +1022,8 @@ export default function CockpitTraitement() {
         <div className="min-h-0">
           {!showGaranties ? (
             /* Zone D - Crédit */
-            <Card className="border-2 border-success/30 h-full flex flex-col bg-card">
-              <div className="bg-success/10 px-3 py-1.5 flex items-center gap-2 font-semibold text-sm border-b border-success/20">
+            <Card className="border-4 border-success/50 h-full flex flex-col bg-card shadow-lg">
+              <div className="bg-success/20 px-3 py-1.5 flex items-center gap-2 font-bold text-sm border-b-2 border-success/30">
                 <CreditCard className="w-4 h-4 text-success" />
                 <span>Zone D - Informations sur le Crédit</span>
               </div>
@@ -1094,17 +1115,17 @@ export default function CockpitTraitement() {
             </Card>
           ) : (
             /* Zone E - Garanties */
-            <Card className="border-2 border-info/30 h-full flex flex-col animate-fade-in bg-card">
-              <div className="bg-info/10 px-3 py-1.5 flex items-center gap-2 font-semibold text-sm border-b border-info/20">
-                <Shield className="w-4 h-4 text-info" />
+            <Card className="border-4 border-purple-500/50 h-full flex flex-col animate-fade-in bg-card shadow-lg">
+              <div className="bg-purple-500/20 px-3 py-1.5 flex items-center gap-2 font-bold text-sm border-b-2 border-purple-500/30">
+                <Shield className="w-4 h-4 text-purple-500" />
                 <span>Zone E - Garanties & Documents</span>
                 {garantiesSaved.length > 0 && (
-                  <Badge className="ml-auto">{garantiesSaved.length} garantie(s) - {formatMontantDisplay(totalGarantiesValue)}</Badge>
+                  <Badge className="ml-auto bg-purple-500/20 text-purple-700">{garantiesSaved.length} garantie(s) - {formatMontantDisplay(totalGarantiesValue)} FCFA</Badge>
                 )}
               </div>
               <div className="flex-1 p-2 grid grid-cols-4 gap-2 overflow-hidden">
-                {/* Récap crédit */}
-                <div className="p-2 rounded-lg bg-primary/5 border border-primary/20 space-y-1">
+                {/* Récap crédit + Liste garanties */}
+                <div className="p-2 rounded-lg bg-primary/5 border border-primary/20 space-y-1 overflow-y-auto">
                   <p className="text-xs font-medium text-primary">Récapitulatif Crédit</p>
                   <div className="text-[11px] space-y-0.5">
                     <div className="flex justify-between"><span className="text-muted-foreground">Type:</span><span>{selectedCredit?.label}</span></div>
@@ -1117,11 +1138,19 @@ export default function CockpitTraitement() {
                   {garantiesSaved.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-border">
                       <p className="text-xs font-medium mb-1">Garanties enregistrées:</p>
-                      <div className="space-y-1 max-h-20 overflow-y-auto">
+                      <div className="space-y-1 max-h-24 overflow-y-auto">
                         {garantiesSaved.map(g => (
-                          <div key={g.id} className="flex items-center justify-between text-[10px] p-1 bg-muted/50 rounded">
-                            <span>{g.typeLabel}</span>
-                            <span className="font-medium">{formatMontantDisplay(g.valeurEstimee)}</span>
+                          <div key={g.id} className="flex items-center justify-between text-[10px] p-1 bg-muted/50 rounded group">
+                            <span className="truncate flex-1">{g.typeLabel}</span>
+                            <span className="font-medium mr-1">{formatMontantDisplay(g.valeurEstimee)}</span>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveGarantie(g.id)}
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
                           </div>
                         ))}
                       </div>
@@ -1153,7 +1182,7 @@ export default function CockpitTraitement() {
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Valeur estimée</Label>
+                      <Label className="text-xs">Valeur estimée (FCFA)</Label>
                       <Input 
                         placeholder="0" 
                         value={garantieForm.valeurEstimee} 
@@ -1248,7 +1277,7 @@ export default function CockpitTraitement() {
               </div>
               
               {/* Actions */}
-              <div className="flex items-center gap-2 p-2 border-t border-border">
+              <div className="flex items-center gap-2 p-2 border-t-2 border-purple-500/30">
                 <Button variant="ghost" size="sm" onClick={() => setShowGaranties(false)}>
                   <ArrowLeft className="w-4 h-4 mr-1" />
                   Retour
