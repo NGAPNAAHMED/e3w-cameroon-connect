@@ -1,1 +1,4 @@
 project_id = "txzncbopraehvfeinnhq"
+
+[functions.analyze-dossier]
+verify_jwt = false
