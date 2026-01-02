@@ -64,7 +64,7 @@ export function useCreditTypes() {
     data: Omit<CreditTypeInsert, 'id' | 'created_at' | 'updated_at'>,
     eligibilityRules?: Partial<EligibilityRule>,
     awardRules?: Partial<AwardRule>
-  ) => {
+  ): Promise<boolean> => {
     try {
       const { data: newType, error: typeError } = await supabase
         .from('credit_types')
@@ -105,14 +105,14 @@ export function useCreditTypes() {
       });
 
       await fetchCreditTypes();
-      return newType;
+      return true;
     } catch (err: any) {
       toast({
         title: 'Erreur',
         description: err.message,
         variant: 'destructive'
       });
-      throw err;
+      return false;
     }
   };
 
@@ -120,7 +120,7 @@ export function useCreditTypes() {
     id: string,
     data: Partial<CreditType>,
     motif?: string
-  ) => {
+  ): Promise<boolean> => {
     try {
       const { error: updateError } = await supabase
         .from('credit_types')
@@ -145,22 +145,22 @@ export function useCreditTypes() {
       });
 
       await fetchCreditTypes();
+      return true;
     } catch (err: any) {
       toast({
         title: 'Erreur',
         description: err.message,
         variant: 'destructive'
       });
-      throw err;
+      return false;
     }
   };
 
-  const toggleCreditTypeStatus = async (id: string, motif: string) => {
+  const toggleStatus = async (id: string, newStatus: 'actif' | 'suspendu', motif?: string): Promise<boolean> => {
     try {
       const creditType = creditTypes.find(c => c.id === id);
-      if (!creditType) return;
+      if (!creditType) return false;
 
-      const newStatus = creditType.status === 'actif' ? 'suspendu' : 'actif';
       const action = newStatus === 'actif' ? 'activation' : 'suspension';
 
       const { error: updateError } = await supabase
@@ -186,12 +186,45 @@ export function useCreditTypes() {
       });
 
       await fetchCreditTypes();
+      return true;
     } catch (err: any) {
       toast({
         title: 'Erreur',
         description: err.message,
         variant: 'destructive'
       });
+      return false;
+    }
+  };
+
+  const deleteCreditType = async (id: string): Promise<boolean> => {
+    try {
+      // Delete related rules first
+      await supabase.from('eligibility_rules').delete().eq('credit_type_id', id);
+      await supabase.from('award_rules').delete().eq('credit_type_id', id);
+      await supabase.from('credit_type_history').delete().eq('credit_type_id', id);
+      
+      const { error: deleteError } = await supabase
+        .from('credit_types')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) throw deleteError;
+
+      toast({
+        title: 'Type supprimé',
+        description: 'Le type de crédit a été supprimé'
+      });
+
+      await fetchCreditTypes();
+      return true;
+    } catch (err: any) {
+      toast({
+        title: 'Erreur',
+        description: err.message,
+        variant: 'destructive'
+      });
+      return false;
     }
   };
 
@@ -220,7 +253,8 @@ export function useCreditTypes() {
     error,
     createCreditType,
     updateCreditType,
-    toggleCreditTypeStatus,
+    toggleStatus,
+    deleteCreditType,
     fetchHistory,
     refresh: fetchCreditTypes
   };

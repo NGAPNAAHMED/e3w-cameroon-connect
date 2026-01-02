@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,46 +6,18 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
-import {
-  Settings,
-  CreditCard,
-  Percent,
-  Save,
-  Plus,
-  Trash2,
-  TrendingUp,
-  PauseCircle,
-  PlayCircle,
-  Shield,
-  Users,
-  AlertTriangle,
-  Bell,
-  FileText,
-  Calculator,
-  Eye,
-  BarChart3,
-  Calendar,
-  Banknote,
-  Clock,
-  CheckCircle2,
-  Edit,
-  XCircle,
-  History,
-  Building2,
-  Briefcase,
-} from 'lucide-react';
-import { typesCredit, reglesOctroi, RegleOctroi } from '@/data/mockData';
+import { useCreditTypes } from '@/hooks/useCreditTypes';
+import { useAuth } from '@/contexts/AuthContext';
+import { Loader2, Settings, CreditCard, Percent, Save, Plus, Trash2, TrendingUp, PauseCircle, PlayCircle, Shield, Users, Bell, Edit, History, Building2, Briefcase, AlertCircle } from 'lucide-react';
 import { formatXAF, formatPourcentage } from '@/lib/formatters';
+import { supabase } from '@/integrations/supabase/client';
 
-// Helper pour formater les montants avec séparateurs
 const formatMontantInput = (value: string): string => {
   const num = value.replace(/\s/g, '').replace(/\D/g, '');
   return num.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -55,126 +27,43 @@ const parseMontant = (value: string): number => {
   return parseInt(value.replace(/\s/g, '')) || 0;
 };
 
-interface HistoryEntry {
-  date: string;
-  time: string;
-  action: 'suspend' | 'activate';
-  motif?: string;
-  user: string;
-}
-
-interface CreditType {
-  id: string;
-  label: string;
-  taux: number;
-  actif: boolean;
-  plafondMin: number;
-  plafondMax: number;
-  dureeMin: number;
-  dureeMax: number;
-  differeMax: number;
-  garantieObligatoire: boolean;
-  nbOctrois: number;
-  montantTotal: number;
-  clientsEligibles: ('salarie' | 'independant' | 'entreprise')[];
-  motifSuspension?: string;
-  history: HistoryEntry[];
-  // Règles d'éligibilité spécifiques
-  reglesEligibilite: {
-    ageMin: number;
-    ageMax: number;
-    ancienneteEmploiMin: number;
-    ancienneteBanqueMin: number;
-    ancienneteActiviteMin: number;
-    revenusMinSalarie: number;
-    caMinIndependant: number;
-    margeMinIndependant: number;
-    tauxEndettementMax: number;
-    scoreMinBEAC: string;
-    epargnePrealableMin: number;
-  };
-  // Règles d'octroi spécifiques
-  reglesOctroi: {
-    quotiteCessibleMax: number;
-    ratioCouvertureDette: number;
-    cautionSolidaireRequise: boolean;
-    nbCautionsMin: number;
-    nantissementObligatoire: boolean;
-    epargneGarantieRequise: boolean;
-    creditProgressif: boolean;
-    delaiGraceMax: number;
-    visiteDomicileObligatoire: boolean;
-    verificationMoralite: boolean;
-  };
+interface CreditTypeForm {
+  libelle: string;
+  taux_interet: number;
+  montant_min: number;
+  montant_max: number;
+  duree_min: number;
+  duree_max: number;
+  differe_max: number;
+  client_categories: ('salarie' | 'independant' | 'entreprise')[];
 }
 
 export default function AdminParametres() {
   const { addNotification } = useNotifications();
+  const { user } = useAuth();
+  const { creditTypes, loading, createCreditType, updateCreditType, toggleStatus, deleteCreditType } = useCreditTypes();
+  
   const [activeTab, setActiveTab] = useState('credits');
   const [showCreditDialog, setShowCreditDialog] = useState(false);
   const [showSuspendDialog, setShowSuspendDialog] = useState(false);
-  const [selectedCreditForSuspend, setSelectedCreditForSuspend] = useState<CreditType | null>(null);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [selectedCredit, setSelectedCredit] = useState<any>(null);
   const [suspendMotif, setSuspendMotif] = useState('');
-  const [editingCredit, setEditingCredit] = useState<CreditType | null>(null);
+  const [editingCredit, setEditingCredit] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   
-  const [credits, setCredits] = useState<CreditType[]>(typesCredit.map((c, i) => ({
-    ...c,
-    actif: true,
-    plafondMin: reglesOctroi.find(r => r.creditTypeId === c.id)?.montantMin || 100000,
-    plafondMax: reglesOctroi.find(r => r.creditTypeId === c.id)?.montantMax || 50000000,
-    dureeMin: reglesOctroi.find(r => r.creditTypeId === c.id)?.dureeMin || 3,
-    dureeMax: reglesOctroi.find(r => r.creditTypeId === c.id)?.dureeMax || 84,
-    differeMax: reglesOctroi.find(r => r.creditTypeId === c.id)?.differeMax || 6,
-    garantieObligatoire: reglesOctroi.find(r => r.creditTypeId === c.id)?.garantieObligatoire || false,
-    nbOctrois: [145, 89, 34, 56, 23, 67, 45, 28][i] || Math.floor(Math.random() * 100 + 20),
-    montantTotal: [725000000, 267000000, 510000000, 336000000, 115000000, 134000000, 225000000, 84000000][i] || Math.floor(Math.random() * 500000000 + 50000000),
-    clientsEligibles: reglesOctroi.find(r => r.creditTypeId === c.id)?.clientsEligibles || ['salarie', 'independant', 'entreprise'],
-    history: [],
-    reglesEligibilite: {
-      ageMin: 21,
-      ageMax: 65,
-      ancienneteEmploiMin: 6,
-      ancienneteBanqueMin: 3,
-      ancienneteActiviteMin: 12,
-      revenusMinSalarie: 100000,
-      caMinIndependant: 500000,
-      margeMinIndependant: 10,
-      tauxEndettementMax: 33,
-      scoreMinBEAC: 'B',
-      epargnePrealableMin: 10,
-    },
-    reglesOctroi: {
-      quotiteCessibleMax: 40,
-      ratioCouvertureDette: 2,
-      cautionSolidaireRequise: false,
-      nbCautionsMin: 1,
-      nantissementObligatoire: false,
-      epargneGarantieRequise: false,
-      creditProgressif: true,
-      delaiGraceMax: 3,
-      visiteDomicileObligatoire: true,
-      verificationMoralite: true,
-    },
-  })));
-
-  // Règles globales d'éligibilité
-  const [reglesGlobales, setReglesGlobales] = useState({
-    tauxEndettementMax: 33,
-    ancienneteEmploiMin: 6,
-    ancienneteBanqueMin: 3,
-    ancienneteActiviteMin: 12,
-    scoreMinBEAC: 'B',
-    ageMin: 21,
-    ageMax: 65,
-    revenusMinSalarie: 100000,
-    caMinIndependant: 500000,
-    margeMinIndependant: 10,
-    epargnePrealableMin: 10,
-    validationDouble: true,
-    notificationAuto: true,
+  const [creditForm, setCreditForm] = useState<CreditTypeForm>({
+    libelle: '',
+    taux_interet: 10,
+    montant_min: 100000,
+    montant_max: 10000000,
+    duree_min: 3,
+    duree_max: 36,
+    differe_max: 3,
+    client_categories: ['salarie', 'independant', 'entreprise'],
   });
 
-  // Paramètres notifications
   const [notifSettings, setNotifSettings] = useState({
     nouveauClient: true,
     dossierTransmis: true,
@@ -184,58 +73,35 @@ export default function AdminParametres() {
     rappelRdv: true,
   });
 
-  // Form state for new/edit credit
-  const [creditForm, setCreditForm] = useState<Partial<CreditType>>({
-    label: '',
-    taux: 10,
-    plafondMin: 100000,
-    plafondMax: 10000000,
-    dureeMin: 3,
-    dureeMax: 36,
-    differeMax: 3,
-    garantieObligatoire: false,
-    clientsEligibles: ['salarie', 'independant', 'entreprise'],
-    reglesEligibilite: {
-      ageMin: 21,
-      ageMax: 65,
-      ancienneteEmploiMin: 6,
-      ancienneteBanqueMin: 3,
-      ancienneteActiviteMin: 12,
-      revenusMinSalarie: 100000,
-      caMinIndependant: 500000,
-      margeMinIndependant: 10,
-      tauxEndettementMax: 33,
-      scoreMinBEAC: 'B',
-      epargnePrealableMin: 10,
-    },
-    reglesOctroi: {
-      quotiteCessibleMax: 40,
-      ratioCouvertureDette: 2,
-      cautionSolidaireRequise: false,
-      nbCautionsMin: 1,
-      nantissementObligatoire: false,
-      epargneGarantieRequise: false,
-      creditProgressif: true,
-      delaiGraceMax: 3,
-      visiteDomicileObligatoire: true,
-      verificationMoralite: true,
-    },
-  });
+  const loadHistory = async (creditTypeId: string) => {
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('credit_type_history')
+        .select('*')
+        .eq('credit_type_id', creditTypeId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
+      if (error) throw error;
+      setHistory(data || []);
+    } catch (error) {
+      console.error('Error loading history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
-  const handleOpenSuspendDialog = (credit: CreditType) => {
-    setSelectedCreditForSuspend(credit);
+  const handleOpenSuspendDialog = (credit: any) => {
+    setSelectedCredit(credit);
     setSuspendMotif('');
     setShowSuspendDialog(true);
   };
 
-  const handleToggleCredit = () => {
-    if (!selectedCreditForSuspend) return;
+  const handleToggleCredit = async () => {
+    if (!selectedCredit) return;
     
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('fr-FR');
-    const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    
-    if (selectedCreditForSuspend.actif && !suspendMotif.trim()) {
+    if (selectedCredit.status === 'actif' && !suspendMotif.trim()) {
       toast({
         title: "Motif requis",
         description: "Veuillez indiquer le motif de suspension",
@@ -244,90 +110,62 @@ export default function AdminParametres() {
       return;
     }
 
-    setCredits(prev => prev.map(c => {
-      if (c.id === selectedCreditForSuspend.id) {
-        const newHistory: HistoryEntry = {
-          date: dateStr,
-          time: timeStr,
-          action: c.actif ? 'suspend' : 'activate',
-          motif: c.actif ? suspendMotif : undefined,
-          user: 'Admin Principal',
-        };
-        return { 
-          ...c, 
-          actif: !c.actif,
-          motifSuspension: c.actif ? suspendMotif : undefined,
-          history: [...c.history, newHistory],
-        };
-      }
-      return c;
-    }));
+    const success = await toggleStatus(
+      selectedCredit.id, 
+      selectedCredit.status === 'actif' ? 'suspendu' : 'actif',
+      suspendMotif || undefined
+    );
 
-    addNotification({
-      title: "Type de crédit modifié",
-      message: `${selectedCreditForSuspend.label} a été ${selectedCreditForSuspend.actif ? 'suspendu' : 'activé'}`,
-      type: selectedCreditForSuspend.actif ? "warning" : "success"
-    });
-    toast({
-      title: "Paramètre modifié",
-      description: `Le type de crédit a été ${selectedCreditForSuspend.actif ? 'suspendu' : 'activé'}`,
-    });
+    if (success) {
+      addNotification({
+        title: "Type de crédit modifié",
+        message: `${selectedCredit.libelle} a été ${selectedCredit.status === 'actif' ? 'suspendu' : 'activé'}`,
+        type: selectedCredit.status === 'actif' ? "warning" : "success"
+      });
+    }
     
     setShowSuspendDialog(false);
-    setSelectedCreditForSuspend(null);
+    setSelectedCredit(null);
     setSuspendMotif('');
   };
 
-  const handleOpenCreditDialog = (credit?: CreditType) => {
+  const handleOpenCreditDialog = (credit?: any) => {
     if (credit) {
       setEditingCredit(credit);
       setCreditForm({
-        ...credit,
+        libelle: credit.libelle,
+        taux_interet: credit.taux_interet,
+        montant_min: credit.montant_min || 100000,
+        montant_max: credit.montant_max || 10000000,
+        duree_min: credit.duree_min || 3,
+        duree_max: credit.duree_max || 36,
+        differe_max: credit.differe_max || 3,
+        client_categories: credit.client_categories || ['salarie', 'independant', 'entreprise'],
       });
     } else {
       setEditingCredit(null);
       setCreditForm({
-        label: '',
-        taux: 10,
-        plafondMin: 100000,
-        plafondMax: 10000000,
-        dureeMin: 3,
-        dureeMax: 36,
-        differeMax: 3,
-        garantieObligatoire: false,
-        clientsEligibles: ['salarie', 'independant', 'entreprise'],
-        reglesEligibilite: {
-          ageMin: 21,
-          ageMax: 65,
-          ancienneteEmploiMin: 6,
-          ancienneteBanqueMin: 3,
-          ancienneteActiviteMin: 12,
-          revenusMinSalarie: 100000,
-          caMinIndependant: 500000,
-          margeMinIndependant: 10,
-          tauxEndettementMax: 33,
-          scoreMinBEAC: 'B',
-          epargnePrealableMin: 10,
-        },
-        reglesOctroi: {
-          quotiteCessibleMax: 40,
-          ratioCouvertureDette: 2,
-          cautionSolidaireRequise: false,
-          nbCautionsMin: 1,
-          nantissementObligatoire: false,
-          epargneGarantieRequise: false,
-          creditProgressif: true,
-          delaiGraceMax: 3,
-          visiteDomicileObligatoire: true,
-          verificationMoralite: true,
-        },
+        libelle: '',
+        taux_interet: 10,
+        montant_min: 100000,
+        montant_max: 10000000,
+        duree_min: 3,
+        duree_max: 36,
+        differe_max: 3,
+        client_categories: ['salarie', 'independant', 'entreprise'],
       });
     }
     setShowCreditDialog(true);
   };
 
-  const handleSaveCreditType = () => {
-    if (!creditForm.label?.trim()) {
+  const handleOpenHistoryDialog = async (credit: any) => {
+    setSelectedCredit(credit);
+    setShowHistoryDialog(true);
+    await loadHistory(credit.id);
+  };
+
+  const handleSaveCreditType = async () => {
+    if (!creditForm.libelle?.trim()) {
       toast({
         title: "Erreur",
         description: "Le libellé est obligatoire",
@@ -337,121 +175,66 @@ export default function AdminParametres() {
     }
 
     if (editingCredit) {
-      // Update existing
-      setCredits(prev => prev.map(c => {
-        if (c.id === editingCredit.id) {
-          return {
-            ...c,
-            ...creditForm,
-          } as CreditType;
-        }
-        return c;
-      }));
-      toast({
-        title: "Type modifié",
-        description: `${creditForm.label} a été mis à jour`,
-      });
+      const success = await updateCreditType(editingCredit.id, creditForm);
+      if (success) {
+        addNotification({
+          title: "Type modifié",
+          message: `${creditForm.libelle} a été mis à jour`,
+          type: "success"
+        });
+      }
     } else {
-      // Create new
-      const newCredit: CreditType = {
-        id: `new_${Date.now()}`,
-        label: creditForm.label || '',
-        taux: creditForm.taux || 10,
-        actif: true,
-        plafondMin: creditForm.plafondMin || 100000,
-        plafondMax: creditForm.plafondMax || 10000000,
-        dureeMin: creditForm.dureeMin || 3,
-        dureeMax: creditForm.dureeMax || 36,
-        differeMax: creditForm.differeMax || 3,
-        garantieObligatoire: creditForm.garantieObligatoire || false,
-        nbOctrois: 0,
-        montantTotal: 0,
-        clientsEligibles: creditForm.clientsEligibles || ['salarie', 'independant', 'entreprise'],
-        history: [],
-        reglesEligibilite: creditForm.reglesEligibilite || {
-          ageMin: 21,
-          ageMax: 65,
-          ancienneteEmploiMin: 6,
-          ancienneteBanqueMin: 3,
-          ancienneteActiviteMin: 12,
-          revenusMinSalarie: 100000,
-          caMinIndependant: 500000,
-          margeMinIndependant: 10,
-          tauxEndettementMax: 33,
-          scoreMinBEAC: 'B',
-          epargnePrealableMin: 10,
-        },
-        reglesOctroi: creditForm.reglesOctroi || {
-          quotiteCessibleMax: 40,
-          ratioCouvertureDette: 2,
-          cautionSolidaireRequise: false,
-          nbCautionsMin: 1,
-          nantissementObligatoire: false,
-          epargneGarantieRequise: false,
-          creditProgressif: true,
-          delaiGraceMax: 3,
-          visiteDomicileObligatoire: true,
-          verificationMoralite: true,
-        },
-      };
-      setCredits(prev => [...prev, newCredit]);
-      addNotification({
-        title: "Nouveau type de crédit",
-        message: `${creditForm.label} a été ajouté`,
-        type: "success"
-      });
-      toast({
-        title: "Type ajouté",
-        description: `${creditForm.label} a été créé`,
-      });
+      const success = await createCreditType(creditForm);
+      if (success) {
+        addNotification({
+          title: "Nouveau type de crédit",
+          message: `${creditForm.libelle} a été créé`,
+          type: "success"
+        });
+      }
     }
     
     setShowCreditDialog(false);
     setEditingCredit(null);
   };
 
-  const handleDeleteCredit = (id: string) => {
-    const credit = credits.find(c => c.id === id);
-    setCredits(prev => prev.filter(c => c.id !== id));
-    toast({
-      title: "Type supprimé",
-      description: `${credit?.label} a été supprimé`,
-      variant: "destructive",
-    });
-  };
-
-  const handleSave = () => {
-    addNotification({
-      title: "Paramètres sauvegardés",
-      message: "Toutes les modifications ont été enregistrées",
-      type: "success"
-    });
-    toast({
-      title: "Paramètres sauvegardés",
-      description: "Les modifications ont été enregistrées avec succès",
-    });
+  const handleDeleteCredit = async (id: string) => {
+    const credit = creditTypes.find(c => c.id === id);
+    const success = await deleteCreditType(id);
+    if (success) {
+      toast({
+        title: "Type supprimé",
+        description: `${credit?.libelle} a été supprimé`,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleClientToggle = (type: 'salarie' | 'independant' | 'entreprise') => {
-    const current = creditForm.clientsEligibles || [];
+    const current = creditForm.client_categories || [];
     if (current.includes(type)) {
       setCreditForm(prev => ({
         ...prev,
-        clientsEligibles: current.filter(t => t !== type),
+        client_categories: current.filter(t => t !== type),
       }));
     } else {
       setCreditForm(prev => ({
         ...prev,
-        clientsEligibles: [...current, type],
+        client_categories: [...current, type],
       }));
     }
   };
 
-  // Crédits actifs uniquement pour l'affichage
-  const creditsActifs = credits.filter(c => c.actif);
-  const creditsInactifs = credits.filter(c => !c.actif);
-  const totalOctrois = credits.reduce((s, c) => s + c.nbOctrois, 0);
-  const totalVolume = credits.reduce((s, c) => s + c.montantTotal, 0);
+  const creditsActifs = creditTypes.filter(c => c.status === 'actif');
+  const creditsInactifs = creditTypes.filter(c => c.status === 'suspendu');
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -460,10 +243,6 @@ export default function AdminParametres() {
           <h1 className="text-2xl font-bold font-display">Paramètres & Configuration</h1>
           <p className="text-muted-foreground">Gérez les règles de crédit et les paramètres système</p>
         </div>
-        <Button variant="gold" onClick={handleSave}>
-          <Save className="w-4 h-4 mr-2" />
-          Sauvegarder tout
-        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -471,10 +250,6 @@ export default function AdminParametres() {
           <TabsTrigger value="credits" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <CreditCard className="w-4 h-4 mr-2" />
             Types de Crédit
-          </TabsTrigger>
-          <TabsTrigger value="eligibilite" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Shield className="w-4 h-4 mr-2" />
-            Éligibilité Globale
           </TabsTrigger>
           <TabsTrigger value="notifications" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Bell className="w-4 h-4 mr-2" />
@@ -488,7 +263,6 @@ export default function AdminParametres() {
 
         {/* Types de Crédit */}
         <TabsContent value="credits" className="space-y-4">
-          {/* Add new credit button */}
           <Card className="glass-card">
             <CardContent className="p-4">
               <Button variant="gold" onClick={() => handleOpenCreditDialog()}>
@@ -498,414 +272,178 @@ export default function AdminParametres() {
             </CardContent>
           </Card>
 
-          {/* Credits actifs */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <PlayCircle className="w-4 h-4 text-success" />
-              Crédits Actifs ({creditsActifs.length})
-            </h3>
-            {creditsActifs.map(credit => (
-              <CreditTypeCard 
-                key={credit.id} 
-                credit={credit}
-                onToggle={() => handleOpenSuspendDialog(credit)}
-                onEdit={() => handleOpenCreditDialog(credit)}
-                onDelete={() => handleDeleteCredit(credit.id)}
-              />
-            ))}
-          </div>
-
-          {/* Credits inactifs */}
-          {creditsInactifs.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <PauseCircle className="w-4 h-4 text-muted-foreground" />
-                Crédits Suspendus ({creditsInactifs.length})
-              </h3>
-              {creditsInactifs.map(credit => (
-                <CreditTypeCard 
-                  key={credit.id} 
-                  credit={credit}
-                  onToggle={() => handleOpenSuspendDialog(credit)}
-                  onEdit={() => handleOpenCreditDialog(credit)}
-                  onDelete={() => handleDeleteCredit(credit.id)}
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Conditions d'Éligibilité Globales */}
-        <TabsContent value="eligibilite" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Conditions générales */}
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-primary" />
-                  Conditions Générales d'Éligibilité
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Taux d'endettement maximum (%)</Label>
-                  <div className="flex items-center gap-4">
-                    <Slider
-                      value={[reglesGlobales.tauxEndettementMax]}
-                      onValueChange={([v]) => setReglesGlobales(p => ({...p, tauxEndettementMax: v}))}
-                      max={50}
-                      min={20}
-                      step={1}
-                      className="flex-1"
-                    />
-                    <Badge variant="outline" className="w-16 justify-center">{reglesGlobales.tauxEndettementMax}%</Badge>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm">Âge minimum</Label>
-                    <Input
-                      type="number"
-                      value={reglesGlobales.ageMin}
-                      onChange={(e) => setReglesGlobales(p => ({...p, ageMin: parseInt(e.target.value)}))}
-                      className="input-dark"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm">Âge maximum</Label>
-                    <Input
-                      type="number"
-                      value={reglesGlobales.ageMax}
-                      onChange={(e) => setReglesGlobales(p => ({...p, ageMax: parseInt(e.target.value)}))}
-                      className="input-dark"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm">Score BEAC minimum</Label>
-                  <Select value={reglesGlobales.scoreMinBEAC} onValueChange={(v) => setReglesGlobales(p => ({...p, scoreMinBEAC: v}))}>
-                    <SelectTrigger className="input-dark">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="A">A - Excellent (Aucun impayé)</SelectItem>
-                      <SelectItem value="B">B - Bon (Impayés {'<'} 500 000 FCFA)</SelectItem>
-                      <SelectItem value="C">C - Acceptable (Impayés {'<'} 1 000 000 FCFA)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Ancienneté requise */}
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-primary" />
-                  Ancienneté Requise
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm">Ancienneté emploi min (mois)</Label>
-                    <Input
-                      type="number"
-                      value={reglesGlobales.ancienneteEmploiMin}
-                      onChange={(e) => setReglesGlobales(p => ({...p, ancienneteEmploiMin: parseInt(e.target.value)}))}
-                      className="input-dark"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm">Ancienneté banque min (mois)</Label>
-                    <Input
-                      type="number"
-                      value={reglesGlobales.ancienneteBanqueMin}
-                      onChange={(e) => setReglesGlobales(p => ({...p, ancienneteBanqueMin: parseInt(e.target.value)}))}
-                      className="input-dark"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">Ancienneté activité min - Indépendants (mois)</Label>
-                  <Input
-                    type="number"
-                    value={reglesGlobales.ancienneteActiviteMin}
-                    onChange={(e) => setReglesGlobales(p => ({...p, ancienneteActiviteMin: parseInt(e.target.value)}))}
-                    className="input-dark"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">Épargne préalable minimum (%)</Label>
-                  <div className="flex items-center gap-4">
-                    <Slider
-                      value={[reglesGlobales.epargnePrealableMin]}
-                      onValueChange={([v]) => setReglesGlobales(p => ({...p, epargnePrealableMin: v}))}
-                      max={30}
-                      min={0}
-                      step={5}
-                      className="flex-1"
-                    />
-                    <Badge variant="outline" className="w-16 justify-center">{reglesGlobales.epargnePrealableMin}%</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Revenus minimums */}
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Banknote className="w-5 h-5 text-primary" />
-                  Revenus Minimums
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm">Revenu net min - Salariés (FCFA)</Label>
-                  <Input
-                    value={formatMontantInput(String(reglesGlobales.revenusMinSalarie))}
-                    onChange={(e) => setReglesGlobales(p => ({...p, revenusMinSalarie: parseMontant(e.target.value)}))}
-                    className="input-dark number-format"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">CA mensuel min - Indépendants (FCFA)</Label>
-                  <Input
-                    value={formatMontantInput(String(reglesGlobales.caMinIndependant))}
-                    onChange={(e) => setReglesGlobales(p => ({...p, caMinIndependant: parseMontant(e.target.value)}))}
-                    className="input-dark number-format"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm">Marge nette min - Indépendants (%)</Label>
-                  <div className="flex items-center gap-4">
-                    <Slider
-                      value={[reglesGlobales.margeMinIndependant]}
-                      onValueChange={([v]) => setReglesGlobales(p => ({...p, margeMinIndependant: v}))}
-                      max={30}
-                      min={5}
-                      step={1}
-                      className="flex-1"
-                    />
-                    <Badge variant="outline" className="w-16 justify-center">{reglesGlobales.margeMinIndependant}%</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Options avancées */}
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="w-5 h-5 text-primary" />
-                  Options Avancées
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div>
-                    <Label className="text-sm">Double validation comité</Label>
-                    <p className="text-xs text-muted-foreground">Requiert 2 validations pour les gros montants</p>
-                  </div>
-                  <Switch
-                    checked={reglesGlobales.validationDouble}
-                    onCheckedChange={(checked) => setReglesGlobales(p => ({...p, validationDouble: checked}))}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div>
-                    <Label className="text-sm">Notifications automatiques</Label>
-                    <p className="text-xs text-muted-foreground">Alertes aux gestionnaires et clients</p>
-                  </div>
-                  <Switch
-                    checked={reglesGlobales.notificationAuto}
-                    onCheckedChange={(checked) => setReglesGlobales(p => ({...p, notificationAuto: checked}))}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Notifications */}
-        <TabsContent value="notifications">
+          {/* Crédits Actifs */}
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-primary" />
-                Configuration des Notifications
+                <PlayCircle className="w-5 h-5 text-success" />
+                Types de Crédit Actifs ({creditsActifs.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Object.entries({
-                  nouveauClient: 'Nouveau client inscrit',
-                  dossierTransmis: 'Dossier transmis au comité',
-                  dossierApprouve: 'Dossier approuvé',
-                  dossierRejete: 'Dossier rejeté/renvoyé',
-                  impayeDetecte: 'Impayé détecté',
-                  rappelRdv: 'Rappel de rendez-vous',
-                }).map(([key, label]) => (
-                  <div key={key} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <span className="text-sm">{label}</span>
-                    <Switch
-                      checked={notifSettings[key as keyof typeof notifSettings]}
-                      onCheckedChange={(checked) => setNotifSettings(p => ({...p, [key]: checked}))}
-                    />
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Libellé</TableHead>
+                      <TableHead>Taux</TableHead>
+                      <TableHead>Montant Min</TableHead>
+                      <TableHead>Montant Max</TableHead>
+                      <TableHead>Durée</TableHead>
+                      <TableHead>Catégories</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {creditsActifs.map(credit => (
+                      <TableRow key={credit.id}>
+                        <TableCell className="font-medium">{credit.libelle}</TableCell>
+                        <TableCell>{formatPourcentage(credit.taux_interet)}</TableCell>
+                        <TableCell className="number-format">{formatXAF(credit.montant_min || 0)}</TableCell>
+                        <TableCell className="number-format">{formatXAF(credit.montant_max || 0)}</TableCell>
+                        <TableCell>{credit.duree_min} - {credit.duree_max} mois</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {credit.client_categories?.map((cat: string) => (
+                              <Badge key={cat} variant="outline" className="text-xs">
+                                {cat === 'salarie' && <Users className="w-3 h-3 mr-1" />}
+                                {cat === 'independant' && <Briefcase className="w-3 h-3 mr-1" />}
+                                {cat === 'entreprise' && <Building2 className="w-3 h-3 mr-1" />}
+                                {cat}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenHistoryDialog(credit)}>
+                              <History className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenCreditDialog(credit)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenSuspendDialog(credit)}>
+                              <PauseCircle className="w-4 h-4 text-warning" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteCredit(credit.id)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {creditsActifs.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          Aucun type de crédit actif
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Crédits Suspendus */}
+          {creditsInactifs.length > 0 && (
+            <Card className="glass-card border-warning/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-warning">
+                  <PauseCircle className="w-5 h-5" />
+                  Types de Crédit Suspendus ({creditsInactifs.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Libellé</TableHead>
+                        <TableHead>Taux</TableHead>
+                        <TableHead>Montant</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {creditsInactifs.map(credit => (
+                        <TableRow key={credit.id} className="opacity-60">
+                          <TableCell className="font-medium">{credit.libelle}</TableCell>
+                          <TableCell>{formatPourcentage(credit.taux_interet)}</TableCell>
+                          <TableCell className="number-format">{formatXAF(credit.montant_min || 0)} - {formatXAF(credit.montant_max || 0)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => handleOpenHistoryDialog(credit)}>
+                                <History className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleOpenSuspendDialog(credit)}>
+                                <PlayCircle className="w-4 h-4 text-success" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteCredit(credit.id)}>
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Notifications */}
+        <TabsContent value="notifications" className="space-y-4">
+          <Card className="glass-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="w-5 h-5" />
+                Paramètres de Notifications
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {Object.entries(notifSettings).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                  <div>
+                    <p className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                    <p className="text-sm text-muted-foreground">Recevoir une notification</p>
+                  </div>
+                  <Switch 
+                    checked={value} 
+                    onCheckedChange={(checked) => setNotifSettings(prev => ({ ...prev, [key]: checked }))}
+                  />
+                </div>
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Statistiques */}
-        <TabsContent value="stats">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="stats" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-primary" />
-                  Performance par Type de Crédit
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {credits.sort((a, b) => b.montantTotal - a.montantTotal).map((credit) => {
-                  const maxMontant = Math.max(...credits.map(c => c.montantTotal));
-                  const percentage = (credit.montantTotal / maxMontant) * 100;
-                  
-                  return (
-                    <Dialog key={credit.id}>
-                      <DialogTrigger asChild>
-                        <div className="space-y-2 cursor-pointer hover:bg-muted/30 p-2 rounded-lg transition-colors">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium flex items-center gap-2">
-                              {credit.actif ? (
-                                <CheckCircle2 className="w-3 h-3 text-success" />
-                              ) : (
-                                <PauseCircle className="w-3 h-3 text-muted-foreground" />
-                              )}
-                              {credit.label}
-                            </span>
-                            <div className="flex items-center gap-4">
-                              <Badge variant="outline">{credit.nbOctrois} octroyés</Badge>
-                              <span className="text-primary font-semibold number-format w-36 text-right">
-                                {formatXAF(credit.montantTotal)}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full transition-all ${credit.actif ? 'bg-gradient-to-r from-primary to-primary/60' : 'bg-muted-foreground/30'}`}
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-lg">
-                        <DialogHeader>
-                          <DialogTitle>Détails - {credit.label}</DialogTitle>
-                        </DialogHeader>
-                        <div className="grid grid-cols-2 gap-4 mt-4">
-                          <div className="p-4 rounded-lg bg-muted/50 text-center">
-                            <p className="text-2xl font-bold text-primary">{credit.nbOctrois}</p>
-                            <p className="text-sm text-muted-foreground">Crédits octroyés</p>
-                          </div>
-                          <div className="p-4 rounded-lg bg-muted/50 text-center">
-                            <p className="text-lg font-bold text-primary number-format">{formatXAF(credit.montantTotal)}</p>
-                            <p className="text-sm text-muted-foreground">Volume total</p>
-                          </div>
-                          <div className="p-4 rounded-lg bg-muted/50 text-center">
-                            <p className="text-2xl font-bold">{formatPourcentage(credit.taux)}</p>
-                            <p className="text-sm text-muted-foreground">Taux d'intérêt</p>
-                          </div>
-                          <div className="p-4 rounded-lg bg-muted/50 text-center">
-                            <p className="text-lg font-bold number-format">{credit.nbOctrois > 0 ? formatXAF(Math.floor(credit.montantTotal / credit.nbOctrois)) : '-'}</p>
-                            <p className="text-sm text-muted-foreground">Montant moyen</p>
-                          </div>
-                        </div>
-                        
-                        {/* Clients éligibles */}
-                        <div className="mt-4">
-                          <p className="text-sm font-medium mb-2">Clients éligibles:</p>
-                          <div className="flex gap-2">
-                            {credit.clientsEligibles.includes('salarie') && (
-                              <Badge variant="outline" className="flex items-center gap-1">
-                                <Users className="w-3 h-3" /> Salariés
-                              </Badge>
-                            )}
-                            {credit.clientsEligibles.includes('independant') && (
-                              <Badge variant="outline" className="flex items-center gap-1">
-                                <Briefcase className="w-3 h-3" /> Indépendants
-                              </Badge>
-                            )}
-                            {credit.clientsEligibles.includes('entreprise') && (
-                              <Badge variant="outline" className="flex items-center gap-1">
-                                <Building2 className="w-3 h-3" /> Entreprises
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Historique */}
-                        {credit.history.length > 0 && (
-                          <div className="mt-4">
-                            <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                              <History className="w-4 h-4" /> Historique des modifications
-                            </p>
-                            <div className="max-h-32 overflow-y-auto space-y-1">
-                              {credit.history.slice().reverse().map((h, i) => (
-                                <div key={i} className="text-xs p-2 rounded bg-muted/50 flex items-center gap-2">
-                                  {h.action === 'suspend' ? (
-                                    <XCircle className="w-3 h-3 text-destructive" />
-                                  ) : (
-                                    <CheckCircle2 className="w-3 h-3 text-success" />
-                                  )}
-                                  <span>{h.date} {h.time}</span>
-                                  <span className="text-muted-foreground">-</span>
-                                  <span>{h.action === 'suspend' ? 'Suspendu' : 'Activé'}</span>
-                                  {h.motif && <span className="text-muted-foreground">({h.motif})</span>}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                  );
-                })}
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-primary">{creditTypes.length}</p>
+                  <p className="text-muted-foreground">Types de crédit</p>
+                </div>
               </CardContent>
             </Card>
-
             <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-primary" />
-                  Résumé Global
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-muted/50 text-center">
-                    <p className="text-3xl font-bold text-primary">{totalOctrois}</p>
-                    <p className="text-sm text-muted-foreground">Total Crédits Octroyés</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/50 text-center">
-                    <p className="text-xl font-bold text-primary number-format">{formatXAF(totalVolume)}</p>
-                    <p className="text-sm text-muted-foreground">Volume Total</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/50 text-center">
-                    <p className="text-3xl font-bold text-success">98.5%</p>
-                    <p className="text-sm text-muted-foreground">Taux de Recouvrement</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/50 text-center">
-                    <p className="text-3xl font-bold text-warning">1.5%</p>
-                    <p className="text-sm text-muted-foreground">Taux d'Impayés</p>
-                  </div>
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-success">{creditsActifs.length}</p>
+                  <p className="text-muted-foreground">Actifs</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="glass-card">
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-warning">{creditsInactifs.length}</p>
+                  <p className="text-muted-foreground">Suspendus</p>
                 </div>
               </CardContent>
             </Card>
@@ -913,465 +451,120 @@ export default function AdminParametres() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog Suspension */}
-      <Dialog open={showSuspendDialog} onOpenChange={setShowSuspendDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedCreditForSuspend?.actif ? (
-                <>
-                  <PauseCircle className="w-5 h-5 text-warning" />
-                  Suspendre {selectedCreditForSuspend?.label}
-                </>
-              ) : (
-                <>
-                  <PlayCircle className="w-5 h-5 text-success" />
-                  Activer {selectedCreditForSuspend?.label}
-                </>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedCreditForSuspend?.actif ? (
-            <div className="space-y-4">
-              <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm">
-                <p className="font-medium text-warning mb-1">Attention</p>
-                <p className="text-muted-foreground">
-                  La suspension de ce type de crédit empêchera les gestionnaires de proposer ce produit aux clients.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Motif de suspension *</Label>
-                <Textarea
-                  placeholder="Indiquez le motif de la suspension..."
-                  value={suspendMotif}
-                  onChange={(e) => setSuspendMotif(e.target.value)}
-                  className="input-dark"
-                  rows={3}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-sm">
-              <p className="text-muted-foreground">
-                Ce type de crédit sera à nouveau disponible pour les gestionnaires.
-              </p>
-              {selectedCreditForSuspend?.motifSuspension && (
-                <p className="mt-2">
-                  <span className="font-medium">Dernier motif de suspension:</span>{' '}
-                  {selectedCreditForSuspend.motifSuspension}
-                </p>
-              )}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSuspendDialog(false)}>
-              Annuler
-            </Button>
-            <Button 
-              variant={selectedCreditForSuspend?.actif ? 'destructive' : 'gold'} 
-              onClick={handleToggleCredit}
-            >
-              {selectedCreditForSuspend?.actif ? 'Suspendre' : 'Activer'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog Création/Modification Type Crédit */}
+      {/* Dialog Création/Modification */}
       <Dialog open={showCreditDialog} onOpenChange={setShowCreditDialog}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5" />
-              {editingCredit ? `Modifier ${editingCredit.label}` : 'Créer un nouveau type de crédit'}
+            <DialogTitle>
+              {editingCredit ? 'Modifier le type de crédit' : 'Nouveau type de crédit'}
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-6">
-            {/* Informations générales */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Libellé du crédit *</Label>
-                <Input
-                  value={creditForm.label || ''}
-                  onChange={(e) => setCreditForm(p => ({...p, label: e.target.value}))}
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label>Libellé *</Label>
+                <Input 
+                  value={creditForm.libelle}
+                  onChange={e => setCreditForm(prev => ({ ...prev, libelle: e.target.value }))}
                   placeholder="Ex: Crédit Consommation"
                   className="input-dark"
                 />
               </div>
+              
               <div className="space-y-2">
-                <Label>Taux d'intérêt annuel (%)</Label>
-                <Input
+                <Label>Taux d'intérêt (%)</Label>
+                <Input 
                   type="number"
-                  step="0.5"
-                  value={creditForm.taux || 10}
-                  onChange={(e) => setCreditForm(p => ({...p, taux: parseFloat(e.target.value)}))}
+                  value={creditForm.taux_interet}
+                  onChange={e => setCreditForm(prev => ({ ...prev, taux_interet: parseFloat(e.target.value) || 0 }))}
                   className="input-dark"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Garantie obligatoire</Label>
-                <div className="flex items-center gap-2 pt-2">
-                  <Checkbox
-                    checked={creditForm.garantieObligatoire}
-                    onCheckedChange={(checked) => setCreditForm(p => ({...p, garantieObligatoire: !!checked}))}
-                  />
-                  <span className="text-sm">Exiger une garantie</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Montants et durées */}
-            <div className="grid grid-cols-5 gap-4">
-              <div className="space-y-2">
-                <Label>Plafond min (FCFA)</Label>
-                <Input
-                  value={formatMontantInput(String(creditForm.plafondMin || 0))}
-                  onChange={(e) => setCreditForm(p => ({...p, plafondMin: parseMontant(e.target.value)}))}
-                  className="input-dark"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Plafond max (FCFA)</Label>
-                <Input
-                  value={formatMontantInput(String(creditForm.plafondMax || 0))}
-                  onChange={(e) => setCreditForm(p => ({...p, plafondMax: parseMontant(e.target.value)}))}
-                  className="input-dark"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Durée min (mois)</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={creditForm.dureeMin || 3}
-                  onChange={(e) => setCreditForm(p => ({...p, dureeMin: parseInt(e.target.value)}))}
-                  className="input-dark"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Durée max (mois)</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={creditForm.dureeMax || 36}
-                  onChange={(e) => setCreditForm(p => ({...p, dureeMax: parseInt(e.target.value)}))}
-                  className="input-dark"
-                />
-              </div>
+              
               <div className="space-y-2">
                 <Label>Différé max (mois)</Label>
-                <Input
+                <Input 
                   type="number"
-                  min="0"
-                  value={creditForm.differeMax || 0}
-                  onChange={(e) => setCreditForm(p => ({...p, differeMax: parseInt(e.target.value)}))}
+                  value={creditForm.differe_max}
+                  onChange={e => setCreditForm(prev => ({ ...prev, differe_max: parseInt(e.target.value) || 0 }))}
+                  className="input-dark"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Montant minimum (FCFA)</Label>
+                <Input 
+                  value={formatMontantInput(String(creditForm.montant_min))}
+                  onChange={e => setCreditForm(prev => ({ ...prev, montant_min: parseMontant(e.target.value) }))}
+                  className="input-dark"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Montant maximum (FCFA)</Label>
+                <Input 
+                  value={formatMontantInput(String(creditForm.montant_max))}
+                  onChange={e => setCreditForm(prev => ({ ...prev, montant_max: parseMontant(e.target.value) }))}
+                  className="input-dark"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Durée minimum (mois)</Label>
+                <Input 
+                  type="number"
+                  value={creditForm.duree_min}
+                  onChange={e => setCreditForm(prev => ({ ...prev, duree_min: parseInt(e.target.value) || 0 }))}
+                  className="input-dark"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Durée maximum (mois)</Label>
+                <Input 
+                  type="number"
+                  value={creditForm.duree_max}
+                  onChange={e => setCreditForm(prev => ({ ...prev, duree_max: parseInt(e.target.value) || 0 }))}
                   className="input-dark"
                 />
               </div>
             </div>
-
-            {/* Clients éligibles */}
+            
             <div className="space-y-3">
-              <Label>Clients éligibles à ce type de crédit</Label>
-              <div className="flex gap-6">
+              <Label>Catégories de clients éligibles</Label>
+              <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={creditForm.clientsEligibles?.includes('salarie')}
+                  <Checkbox 
+                    id="salarie"
+                    checked={creditForm.client_categories.includes('salarie')}
                     onCheckedChange={() => handleClientToggle('salarie')}
                   />
-                  <Users className="w-4 h-4 text-primary" />
-                  <span>Salariés</span>
+                  <Label htmlFor="salarie" className="flex items-center gap-1 cursor-pointer">
+                    <Users className="w-4 h-4" /> Salariés
+                  </Label>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={creditForm.clientsEligibles?.includes('independant')}
+                  <Checkbox 
+                    id="independant"
+                    checked={creditForm.client_categories.includes('independant')}
                     onCheckedChange={() => handleClientToggle('independant')}
                   />
-                  <Briefcase className="w-4 h-4 text-primary" />
-                  <span>Indépendants</span>
+                  <Label htmlFor="independant" className="flex items-center gap-1 cursor-pointer">
+                    <Briefcase className="w-4 h-4" /> Indépendants
+                  </Label>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={creditForm.clientsEligibles?.includes('entreprise')}
+                  <Checkbox 
+                    id="entreprise"
+                    checked={creditForm.client_categories.includes('entreprise')}
                     onCheckedChange={() => handleClientToggle('entreprise')}
                   />
-                  <Building2 className="w-4 h-4 text-primary" />
-                  <span>Entreprises</span>
+                  <Label htmlFor="entreprise" className="flex items-center gap-1 cursor-pointer">
+                    <Building2 className="w-4 h-4" /> Entreprises
+                  </Label>
                 </div>
               </div>
-            </div>
-
-            {/* Règles d'éligibilité et d'octroi */}
-            <div className="grid grid-cols-2 gap-6">
-              {/* Règles d'éligibilité */}
-              <Card className="border-2 border-primary/30">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-primary" />
-                    Règles d'Éligibilité
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Âge min</Label>
-                      <Input
-                        type="number"
-                        value={creditForm.reglesEligibilite?.ageMin || 21}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, ageMin: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Âge max</Label>
-                      <Input
-                        type="number"
-                        value={creditForm.reglesEligibilite?.ageMax || 65}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, ageMax: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Anc. emploi min (mois)</Label>
-                      <Input
-                        type="number"
-                        value={creditForm.reglesEligibilite?.ancienneteEmploiMin || 6}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, ancienneteEmploiMin: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Anc. banque min (mois)</Label>
-                      <Input
-                        type="number"
-                        value={creditForm.reglesEligibilite?.ancienneteBanqueMin || 3}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, ancienneteBanqueMin: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Anc. activité min (mois)</Label>
-                      <Input
-                        type="number"
-                        value={creditForm.reglesEligibilite?.ancienneteActiviteMin || 12}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, ancienneteActiviteMin: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Taux endettement max (%)</Label>
-                      <Input
-                        type="number"
-                        value={creditForm.reglesEligibilite?.tauxEndettementMax || 33}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, tauxEndettementMax: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Revenu min salarié (FCFA)</Label>
-                      <Input
-                        value={formatMontantInput(String(creditForm.reglesEligibilite?.revenusMinSalarie || 100000))}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, revenusMinSalarie: parseMontant(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">CA min indép. (FCFA)</Label>
-                      <Input
-                        value={formatMontantInput(String(creditForm.reglesEligibilite?.caMinIndependant || 500000))}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, caMinIndependant: parseMontant(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Score BEAC min</Label>
-                      <Select 
-                        value={creditForm.reglesEligibilite?.scoreMinBEAC || 'B'}
-                        onValueChange={(v) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, scoreMinBEAC: v}
-                        }))}
-                      >
-                        <SelectTrigger className="input-dark h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="A">A - Excellent</SelectItem>
-                          <SelectItem value="B">B - Bon</SelectItem>
-                          <SelectItem value="C">C - Acceptable</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Épargne préalable (%)</Label>
-                      <Input
-                        type="number"
-                        value={creditForm.reglesEligibilite?.epargnePrealableMin || 10}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesEligibilite: {...p.reglesEligibilite!, epargnePrealableMin: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Règles d'octroi */}
-              <Card className="border-2 border-success/30">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Calculator className="w-4 h-4 text-success" />
-                    Règles d'Octroi
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Quotité cessible max (%)</Label>
-                      <Input
-                        type="number"
-                        value={creditForm.reglesOctroi?.quotiteCessibleMax || 40}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, quotiteCessibleMax: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Ratio couverture dette</Label>
-                      <Input
-                        type="number"
-                        step="0.5"
-                        value={creditForm.reglesOctroi?.ratioCouvertureDette || 2}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, ratioCouvertureDette: parseFloat(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Nb cautions min</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={creditForm.reglesOctroi?.nbCautionsMin || 1}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, nbCautionsMin: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Délai grâce max (mois)</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={creditForm.reglesOctroi?.delaiGraceMax || 3}
-                        onChange={(e) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, delaiGraceMax: parseInt(e.target.value)}
-                        }))}
-                        className="input-dark h-8"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={creditForm.reglesOctroi?.cautionSolidaireRequise}
-                        onCheckedChange={(checked) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, cautionSolidaireRequise: !!checked}
-                        }))}
-                      />
-                      <span className="text-sm">Caution solidaire requise</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={creditForm.reglesOctroi?.nantissementObligatoire}
-                        onCheckedChange={(checked) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, nantissementObligatoire: !!checked}
-                        }))}
-                      />
-                      <span className="text-sm">Nantissement obligatoire</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={creditForm.reglesOctroi?.epargneGarantieRequise}
-                        onCheckedChange={(checked) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, epargneGarantieRequise: !!checked}
-                        }))}
-                      />
-                      <span className="text-sm">Épargne de garantie requise</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={creditForm.reglesOctroi?.creditProgressif}
-                        onCheckedChange={(checked) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, creditProgressif: !!checked}
-                        }))}
-                      />
-                      <span className="text-sm">Crédit progressif (pas-à-pas)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={creditForm.reglesOctroi?.visiteDomicileObligatoire}
-                        onCheckedChange={(checked) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, visiteDomicileObligatoire: !!checked}
-                        }))}
-                      />
-                      <span className="text-sm">Visite à domicile obligatoire</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={creditForm.reglesOctroi?.verificationMoralite}
-                        onCheckedChange={(checked) => setCreditForm(p => ({
-                          ...p,
-                          reglesOctroi: {...p.reglesOctroi!, verificationMoralite: !!checked}
-                        }))}
-                      />
-                      <span className="text-sm">Vérification de moralité</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </div>
 
@@ -1381,112 +574,108 @@ export default function AdminParametres() {
             </Button>
             <Button variant="gold" onClick={handleSaveCreditType}>
               <Save className="w-4 h-4 mr-2" />
-              {editingCredit ? 'Enregistrer les modifications' : 'Créer le type de crédit'}
+              {editingCredit ? 'Mettre à jour' : 'Créer'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
 
-// Composant pour les cartes de type de crédit
-function CreditTypeCard({ 
-  credit, 
-  onToggle, 
-  onEdit,
-  onDelete,
-}: { 
-  credit: CreditType;
-  onToggle: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const formatMontant = (value: number): string => {
-    return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  };
-
-  return (
-    <Card className={`glass-card transition-all ${!credit.actif ? 'opacity-60 border-dashed' : ''}`}>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-4 flex-wrap">
-          {/* Status & Name */}
-          <div className="flex items-center gap-3 min-w-48">
-            {credit.actif ? (
-              <PlayCircle className="w-5 h-5 text-success" />
-            ) : (
-              <PauseCircle className="w-5 h-5 text-muted-foreground" />
-            )}
-            <span className="font-semibold">{credit.label}</span>
-          </div>
-
-          {/* Taux */}
-          <div className="w-20 text-center">
-            <p className="text-xs text-muted-foreground">Taux</p>
-            <p className="font-semibold">{credit.taux}%</p>
-          </div>
-
-          {/* Plafond */}
-          <div className="w-48 text-center">
-            <p className="text-xs text-muted-foreground">Plafond</p>
-            <p className="font-medium text-sm">{formatMontant(credit.plafondMin)} - {formatMontant(credit.plafondMax)}</p>
-          </div>
-
-          {/* Clients */}
-          <div className="flex items-center gap-1">
-            {credit.clientsEligibles.includes('salarie') && (
-              <Badge variant="outline" className="text-xs"><Users className="w-3 h-3 mr-1" />Sal</Badge>
-            )}
-            {credit.clientsEligibles.includes('independant') && (
-              <Badge variant="outline" className="text-xs"><Briefcase className="w-3 h-3 mr-1" />Ind</Badge>
-            )}
-            {credit.clientsEligibles.includes('entreprise') && (
-              <Badge variant="outline" className="text-xs"><Building2 className="w-3 h-3 mr-1" />Ent</Badge>
+      {/* Dialog Suspension/Activation */}
+      <Dialog open={showSuspendDialog} onOpenChange={setShowSuspendDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCredit?.status === 'actif' ? 'Suspendre le type de crédit' : 'Activer le type de crédit'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <p>
+              Êtes-vous sûr de vouloir {selectedCredit?.status === 'actif' ? 'suspendre' : 'activer'} <strong>{selectedCredit?.libelle}</strong> ?
+            </p>
+            
+            {selectedCredit?.status === 'actif' && (
+              <div className="space-y-2">
+                <Label>Motif de suspension *</Label>
+                <Textarea 
+                  value={suspendMotif}
+                  onChange={e => setSuspendMotif(e.target.value)}
+                  placeholder="Indiquez le motif de la suspension..."
+                  className="input-dark"
+                />
+              </div>
             )}
           </div>
 
-          {/* Stats */}
-          <div className="flex items-center gap-2 ml-auto">
-            <Badge variant="outline" className="text-xs">
-              {credit.nbOctrois} octrois
-            </Badge>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={onEdit}
-            >
-              <Edit className="w-4 h-4" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSuspendDialog(false)}>
+              Annuler
             </Button>
             <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={onToggle}
+              variant={selectedCredit?.status === 'actif' ? 'destructive' : 'gold'}
+              onClick={handleToggleCredit}
             >
-              {credit.actif ? (
-                <PauseCircle className="w-4 h-4 text-warning" />
+              {selectedCredit?.status === 'actif' ? (
+                <>
+                  <PauseCircle className="w-4 h-4 mr-2" />
+                  Suspendre
+                </>
               ) : (
-                <PlayCircle className="w-4 h-4 text-success" />
+                <>
+                  <PlayCircle className="w-4 h-4 mr-2" />
+                  Activer
+                </>
               )}
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-destructive hover:text-destructive"
-              onClick={onDelete}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Historique */}
+      <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-5 h-5" />
+              Historique - {selectedCredit?.libelle}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : history.length > 0 ? (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {history.map((entry, idx) => (
+                  <div key={idx} className="p-3 rounded-lg bg-muted/30 border border-border/50">
+                    <div className="flex items-center justify-between mb-1">
+                      <Badge variant={entry.action === 'creation' ? 'default' : entry.action === 'modification' ? 'secondary' : 'outline'}>
+                        {entry.action}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(entry.created_at).toLocaleString('fr-FR')}
+                      </span>
+                    </div>
+                    {entry.motif && (
+                      <p className="text-sm text-muted-foreground mt-1">{entry.motif}</p>
+                    )}
+                    {entry.user_name && (
+                      <p className="text-xs text-muted-foreground mt-1">Par: {entry.user_name}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>Aucun historique disponible</p>
+              </div>
+            )}
           </div>
-        </div>
-        
-        {/* Motif de suspension */}
-        {!credit.actif && credit.motifSuspension && (
-          <div className="mt-2 p-2 rounded bg-warning/10 text-xs flex items-start gap-2">
-            <AlertTriangle className="w-3 h-3 text-warning mt-0.5" />
-            <span className="text-muted-foreground">Motif: {credit.motifSuspension}</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
