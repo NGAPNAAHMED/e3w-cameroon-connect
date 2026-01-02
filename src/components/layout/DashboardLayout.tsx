@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Info,
-  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/formatters';
@@ -45,9 +44,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    await logout();
+    navigate('/auth');
   };
 
   const navItems = user?.role === 'admin' ? [
@@ -97,7 +96,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       )}>
         {/* Logo */}
         <div className="p-4 border-b border-sidebar-border flex-shrink-0">
-          <div className="flex items-center gap-3">
+          <Link to="/dashboard" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-lg font-bold text-primary-foreground font-display">E³</span>
             </div>
@@ -107,7 +106,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 {user?.role === 'admin' ? 'Administration' : user?.role === 'gestionnaire' ? 'Gestionnaire' : 'Espace Client'}
               </p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Navigation */}
@@ -115,18 +114,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
-              <button
+              <Link
                 key={item.path}
-                onClick={() => {
-                  navigate(item.path);
-                  setSidebarOpen(false);
-                }}
-                className={cn("nav-item w-full", isActive && "active")}
+                to={item.path}
+                onClick={() => setSidebarOpen(false)}
+                className={cn("nav-item w-full flex items-center", isActive && "active")}
               >
                 <item.icon className="w-5 h-5" />
-                <span className="flex-1 text-left">{item.label}</span>
+                <span className="flex-1 text-left ml-3">{item.label}</span>
                 {isActive && <ChevronRight className="w-4 h-4" />}
-              </button>
+              </Link>
             );
           })}
         </nav>
@@ -148,9 +145,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" className="flex-1 justify-start" onClick={() => navigate('/dashboard/parametres')}>
-              <Settings className="w-4 h-4 mr-2" />
-              Paramètres
+            <Button variant="ghost" size="sm" className="flex-1 justify-start" asChild>
+              <Link to="/dashboard/parametres">
+                <Settings className="w-4 h-4 mr-2" />
+                Paramètres
+              </Link>
             </Button>
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
