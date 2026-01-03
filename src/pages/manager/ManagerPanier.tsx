@@ -137,12 +137,14 @@ export default function ManagerPanier() {
   };
 
   const handleTransmit = async (dossierId: string) => {
-    const success = await updateDossierStatus(dossierId, 'transmis');
-    if (success) {
+    try {
+      await updateDossierStatus(dossierId, 'transmis');
       toast({
         title: "Dossier transmis",
         description: "Le dossier a été transmis au comité",
       });
+    } catch (error) {
+      console.error('Error transmitting dossier:', error);
     }
   };
 
@@ -463,7 +465,7 @@ export default function ManagerPanier() {
                     <COIScoreCard 
                       score={analysisResult.score_global} 
                       classeRisque={analysisResult.classe_risque}
-                      decision={analysisResult.recommandation.decision}
+                      recommendation={analysisResult.recommandation?.decision}
                     />
                     <COIRadarChart scores={analysisResult.scores} />
                   </div>
@@ -499,13 +501,16 @@ export default function ManagerPanier() {
 
                 <TabsContent value="indicateurs">
                   <COIIndicators 
-                    indicateurs={analysisResult.indicateurs} 
+                    indicateurs={analysisResult.indicateurs.map(ind => ({
+                      ...ind,
+                      seuil: '-'
+                    }))} 
                     conformiteCobac={analysisResult.conformite_cobac}
                   />
                 </TabsContent>
 
                 <TabsContent value="note">
-                  <COIAnalysisNote recommandation={analysisResult.recommandation} />
+                  <COIAnalysisNote analysis={analysisResult} />
                 </TabsContent>
 
                 <TabsContent value="remarques" className="space-y-4">
@@ -568,15 +573,18 @@ export default function ManagerPanier() {
                 <COIScoreCard 
                   score={analysisResult.score_global} 
                   classeRisque={analysisResult.classe_risque}
-                  decision={analysisResult.recommandation.decision}
+                  recommendation={analysisResult.recommandation?.decision}
                 />
                 <COIRadarChart scores={analysisResult.scores} />
               </div>
               <COIIndicators 
-                indicateurs={analysisResult.indicateurs} 
+                indicateurs={analysisResult.indicateurs.map(ind => ({
+                  ...ind,
+                  seuil: '-'
+                }))} 
                 conformiteCobac={analysisResult.conformite_cobac}
               />
-              <COIAnalysisNote recommandation={analysisResult.recommandation} />
+              <COIAnalysisNote analysis={analysisResult} />
             </div>
           )}
         </DialogContent>
