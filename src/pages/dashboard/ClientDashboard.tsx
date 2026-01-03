@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Wallet,
   FileText,
@@ -15,6 +15,7 @@ import {
   Bell,
   CheckCircle2,
   Clock,
+  MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatXAF, formatDate } from '@/lib/formatters';
@@ -93,30 +94,33 @@ export default function ClientDashboard() {
 
           {/* Quick Actions */}
           <div className="grid grid-cols-3 gap-4">
-            <Button
-              variant="outline"
-              className="h-auto py-6 flex-col gap-2"
-              onClick={() => navigate('/dashboard/dossier')}
-            >
-              <FileText className="w-6 h-6 text-primary" />
-              <span className="text-xs">Mon Dossier</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-6 flex-col gap-2"
-              onClick={() => navigate('/dashboard/simulation')}
-            >
-              <Calculator className="w-6 h-6 text-info" />
-              <span className="text-xs">Simulation</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-6 flex-col gap-2"
-              onClick={() => navigate('/dashboard/gestionnaire')}
-            >
-              <User className="w-6 h-6 text-success" />
-              <span className="text-xs">Mon Gestionnaire</span>
-            </Button>
+            <Link to="/dashboard/dossier" className="block">
+              <Button
+                variant="outline"
+                className="w-full h-auto py-6 flex-col gap-2 hover:border-primary/50 transition-colors"
+              >
+                <FileText className="w-6 h-6 text-primary" />
+                <span className="text-xs">Mon Dossier</span>
+              </Button>
+            </Link>
+            <Link to="/dashboard/simulation" className="block">
+              <Button
+                variant="outline"
+                className="w-full h-auto py-6 flex-col gap-2 hover:border-info/50 transition-colors"
+              >
+                <Calculator className="w-6 h-6 text-info" />
+                <span className="text-xs">Simulation</span>
+              </Button>
+            </Link>
+            <Link to="/dashboard/contact" className="block">
+              <Button
+                variant="outline"
+                className="w-full h-auto py-6 flex-col gap-2 hover:border-success/50 transition-colors"
+              >
+                <MessageSquare className="w-6 h-6 text-success" />
+                <span className="text-xs">Contacter</span>
+              </Button>
+            </Link>
           </div>
 
           {/* Transactions */}
@@ -193,10 +197,12 @@ export default function ClientDashboard() {
                 </div>
               </div>
 
-              <Button variant="gold" className="w-full" onClick={() => navigate('/dashboard/dossier')}>
-                Compléter mon dossier
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
+              <Link to="/dashboard/dossier" className="block">
+                <Button variant="gold" className="w-full">
+                  Compléter mon dossier
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
@@ -218,9 +224,11 @@ export default function ClientDashboard() {
                     {gestionnaire.prenom} {gestionnaire.nom}
                   </h3>
                   <p className="text-sm text-muted-foreground">{gestionnaire.telephone}</p>
-                  <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate('/dashboard/gestionnaire')}>
-                    Contacter
-                  </Button>
+                  <Link to="/dashboard/contact">
+                    <Button variant="outline" size="sm" className="mt-3">
+                      Contacter
+                    </Button>
+                  </Link>
                 </div>
               ) : (
                 <div className="text-center py-4">
