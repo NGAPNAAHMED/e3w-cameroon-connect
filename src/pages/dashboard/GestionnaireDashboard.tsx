@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useDossiers } from '@/hooks/useDossiers';
+import { toast } from '@/hooks/use-toast';
 import {
   Search,
   Users,
@@ -18,6 +20,10 @@ import {
   TrendingUp,
   AlertTriangle,
   Phone,
+  Plus,
+  Brain,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import { clients, companies, Client, ClientSalarie, ClientIndependant, ClientEntreprise } from '@/data/mockData';
 import { formatXAF, getInitials } from '@/lib/formatters';
@@ -25,6 +31,7 @@ import { cn } from '@/lib/utils';
 
 export default function GestionnaireDashboard() {
   const navigate = useNavigate();
+  const { dossiers, loading, addToPanier } = useDossiers();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('tous');
 
@@ -55,10 +62,15 @@ export default function GestionnaireDashboard() {
     return true;
   });
 
+  // Stats from real dossiers
+  const panierCount = dossiers.filter(d => d.status === 'panier').length;
+  const analyseCount = dossiers.filter(d => d.status === 'analyse').length;
+  const transmisCount = dossiers.filter(d => d.status === 'transmis').length;
+
   const stats = {
     total: myClients.length,
     enCours: myClients.filter(c => c.statut === 'en_cours').length,
-    panier: myClients.filter(c => c.statut === 'panier').length,
+    panier: panierCount,
     kycComplet: myClients.filter(c => c.kycComplete).length,
   };
 
@@ -73,7 +85,7 @@ export default function GestionnaireDashboard() {
       return (
         <tr 
           key={client.id} 
-          className="table-row-hover"
+          className="table-row-hover cursor-pointer"
           onClick={() => handleClientClick(client)}
         >
           <td className="p-3">
@@ -129,7 +141,7 @@ export default function GestionnaireDashboard() {
       return (
         <tr 
           key={client.id} 
-          className="table-row-hover"
+          className="table-row-hover cursor-pointer"
           onClick={() => handleClientClick(client)}
         >
           <td className="p-3">
@@ -181,7 +193,7 @@ export default function GestionnaireDashboard() {
       return (
         <tr 
           key={client.id} 
-          className="table-row-hover"
+          className="table-row-hover cursor-pointer"
           onClick={() => handleClientClick(client)}
         >
           <td className="p-3">
@@ -232,7 +244,7 @@ export default function GestionnaireDashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="glass-card">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -261,15 +273,31 @@ export default function GestionnaireDashboard() {
           </CardContent>
         </Card>
 
+        <Link to="/dashboard/panier" className="block">
+          <Card className="glass-card hover:border-warning/50 transition-colors cursor-pointer h-full">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Panier</p>
+                  <p className="text-2xl font-bold text-warning font-display">{stats.panier}</p>
+                </div>
+                <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
+                  <ShoppingCart className="w-5 h-5 text-warning" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Card className="glass-card">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Panier</p>
-                <p className="text-2xl font-bold text-warning font-display">{stats.panier}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Analysés</p>
+                <p className="text-2xl font-bold text-purple-500 font-display">{analyseCount}</p>
               </div>
-              <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-                <ShoppingCart className="w-5 h-5 text-warning" />
+              <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Brain className="w-5 h-5 text-purple-500" />
               </div>
             </div>
           </CardContent>
@@ -279,15 +307,31 @@ export default function GestionnaireDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">KYC Complet</p>
-                <p className="text-2xl font-bold text-success font-display">{stats.kycComplet}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Transmis</p>
+                <p className="text-2xl font-bold text-success font-display">{transmisCount}</p>
               </div>
               <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-success" />
+                <Send className="w-5 h-5 text-success" />
               </div>
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex gap-3">
+        <Link to="/dashboard/panier">
+          <Button variant="gold">
+            <ShoppingCart className="w-4 h-4 mr-2" />
+            Voir le panier ({stats.panier})
+          </Button>
+        </Link>
+        <Link to="/dashboard/agenda">
+          <Button variant="outline">
+            <Clock className="w-4 h-4 mr-2" />
+            Mon agenda
+          </Button>
+        </Link>
       </div>
 
       {/* Portfolio Table */}

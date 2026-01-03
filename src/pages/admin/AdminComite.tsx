@@ -1,14 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useDossiers } from '@/hooks/useDossiers';
+import { supabase } from '@/integrations/supabase/client';
+import COIRadarChart from '@/components/coi/COIRadarChart';
+import COIScoreCard from '@/components/coi/COIScoreCard';
+import COIIndicators from '@/components/coi/COIIndicators';
+import COIAnalysisNote from '@/components/coi/COIAnalysisNote';
 import {
   FolderKanban,
   CheckCircle2,
@@ -27,9 +36,16 @@ import {
   Briefcase,
   TrendingUp,
   ArrowLeft,
+  Brain,
+  Search,
+  Target,
+  BarChart3,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import { clients, companies, staff, Client, ClientSalarie, ClientIndependant } from '@/data/mockData';
 import { formatXAF, getInitials, formatDuree } from '@/lib/formatters';
+import { cn } from '@/lib/utils';
 
 const motifsRenvoi = [
   { id: 'garantie', label: 'Garantie insuffisante' },
@@ -41,115 +57,49 @@ const motifsRenvoi = [
   { id: 'autre', label: 'Autre motif' },
 ];
 
-// Mock dossiers en comité
-const initialDossiers = [
-  {
-    id: 'd1',
-    clientId: 'sal_1',
-    gestionnaireId: 's2',
-    montant: 5000000,
-    type: 'Crédit Consommation',
-    duree: 24,
-    taux: 12,
-    mensualite: 235000,
-    dateDepot: '2024-01-15',
-    garantie: 'Caution personnelle - Jean Atangana',
-    statut: 'en_attente',
-  },
-  {
-    id: 'd2',
-    clientId: 'ind_1',
-    gestionnaireId: 's3',
-    montant: 15000000,
-    type: 'Crédit Immobilier',
-    duree: 60,
-    taux: 7.5,
-    mensualite: 298000,
-    dateDepot: '2024-01-14',
-    garantie: 'Titre foncier - TF/YDE/2020/1234',
-    statut: 'en_attente',
-  },
-  {
-    id: 'd3',
-    clientId: 'sal_3',
-    gestionnaireId: 's2',
-    montant: 2000000,
-    type: 'Crédit Scolaire',
-    duree: 12,
-    taux: 8.5,
-    mensualite: 175000,
-    dateDepot: '2024-01-13',
-    garantie: 'Caution solidaire employeur',
-    statut: 'en_attente',
-  },
-];
-
 export default function AdminComite() {
+  const navigate = useNavigate();
   const { addNotification } = useNotifications();
-  const [dossiers, setDossiers] = useState(initialDossiers);
+  const { dossiers, loading, updateDossierStatus, fetchHistory } = useDossiers();
   const [motifRenvoi, setMotifRenvoi] = useState('');
   const [detailsRenvoi, setDetailsRenvoi] = useState('');
-  const [selectedDossier, setSelectedDossier] = useState<typeof initialDossiers[0] | null>(null);
+  const [selectedDossier, setSelectedDossier] = useState<any>(null);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('transmis');
 
-  const getClientInfo = (clientId: string) => {
-    const client = clients.find(c => c.id === clientId);
-    if (!client) return null;
-    
-    if (client.type !== 'entreprise') {
-      const c = client as ClientSalarie | ClientIndependant;
-      return {
-        name: `${c.prenom} ${c.nom}`,
-        avatar: c.avatar,
-        type: client.type,
-        telephone: c.telephone,
-        email: c.email,
-        details: client.type === 'salarie' 
-          ? { employeur: companies.find(co => co.id === (client as ClientSalarie).employeurId)?.name, revenu: (client as ClientSalarie).revenuNet }
-          : { activite: (client as ClientIndependant).activite, ca: (client as ClientIndependant).chiffreAffaires },
-      };
+  // Filter dossiers by status
+  const transmittedDossiers = dossiers.filter(d => d.status === 'transmis');
+  const approvedDossiers = dossiers.filter(d => d.status === 'approuve');
+  const rejectedDossiers = dossiers.filter(d => d.status === 'refuse');
+
+  const filteredDossiers = transmittedDossiers.filter(d => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return d.client_id?.toLowerCase().includes(query) || 
+           d.id.toLowerCase().includes(query);
+  });
+
+  const handleApprove = async (dossierId: string) => {
+    try {
+      await updateDossierStatus(dossierId, 'approuve');
+      
+      addNotification({
+        title: "Dossier approuvé",
+        message: `Le crédit a été validé par le comité`,
+        type: "success"
+      });
+      
+      toast({
+        title: "Dossier approuvé",
+        description: "Le crédit a été validé par le comité",
+      });
+    } catch (error) {
+      console.error('Error approving dossier:', error);
     }
-    
-    const company = companies.find(co => co.id === (client as any).companyId);
-    return {
-      name: company?.name || 'Entreprise',
-      avatar: company?.logo,
-      type: 'entreprise',
-      telephone: client.telephone,
-      email: client.email,
-      details: { secteur: company?.secteur, responsable: company?.responsable },
-    };
   };
 
-  const getManager = (managerId: string) => staff.find(s => s.id === managerId);
-
-  const handleApprove = (dossierId: string) => {
-    const dossier = dossiers.find(d => d.id === dossierId);
-    const clientInfo = getClientInfo(dossier!.clientId);
-    const manager = getManager(dossier!.gestionnaireId);
-    
-    setDossiers(prev => prev.filter(d => d.id !== dossierId));
-    
-    addNotification({
-      title: "Dossier approuvé",
-      message: `Le crédit de ${clientInfo?.name} (${formatXAF(dossier!.montant)}) a été validé`,
-      type: "success"
-    });
-    
-    // Notification to manager
-    addNotification({
-      title: "Validation comité",
-      message: `Dossier ${clientInfo?.name} approuvé - Préparez le décaissement`,
-      type: "success",
-      link: "/dashboard/dossiers"
-    });
-    
-    toast({
-      title: "Dossier approuvé",
-      description: "Le crédit a été validé par le comité",
-    });
-  };
-
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!motifRenvoi || !selectedDossier) {
       toast({
         title: "Erreur",
@@ -159,378 +109,446 @@ export default function AdminComite() {
       return;
     }
     
-    const clientInfo = getClientInfo(selectedDossier.clientId);
-    const manager = getManager(selectedDossier.gestionnaireId);
-    const motif = motifsRenvoi.find(m => m.id === motifRenvoi)?.label;
-    
-    setDossiers(prev => prev.filter(d => d.id !== selectedDossier.id));
-    
-    addNotification({
-      title: "Dossier renvoyé",
-      message: `Dossier ${clientInfo?.name} renvoyé à ${manager?.prenom} - Motif: ${motif}`,
-      type: "warning",
-      link: "/dashboard/gestionnaires"
-    });
-    
-    toast({
-      title: "Dossier renvoyé",
-      description: `Le dossier a été renvoyé au gestionnaire`,
-    });
-    
-    setSelectedDossier(null);
-    setMotifRenvoi('');
-    setDetailsRenvoi('');
+    try {
+      const motif = motifsRenvoi.find(m => m.id === motifRenvoi)?.label;
+      
+      await updateDossierStatus(selectedDossier.id, 'refuse', {
+        motif,
+        details: detailsRenvoi
+      });
+      
+      addNotification({
+        title: "Dossier renvoyé",
+        message: `Dossier renvoyé au gestionnaire - Motif: ${motif}`,
+        type: "warning",
+      });
+      
+      toast({
+        title: "Dossier renvoyé",
+        description: "Le dossier a été renvoyé au gestionnaire",
+      });
+      
+      setSelectedDossier(null);
+      setMotifRenvoi('');
+      setDetailsRenvoi('');
+    } catch (error) {
+      console.error('Error rejecting dossier:', error);
+    }
   };
+
+  const handleViewDetail = (dossier: any) => {
+    setSelectedDossier(dossier);
+    setShowDetailDialog(true);
+  };
+
+  const getDecisionColor = (decision: string) => {
+    switch (decision) {
+      case 'favorable': return 'text-success';
+      case 'defavorable': return 'text-destructive';
+      default: return 'text-warning';
+    }
+  };
+
+  const getDecisionBg = (decision: string) => {
+    switch (decision) {
+      case 'favorable': return 'bg-success/20';
+      case 'defavorable': return 'bg-destructive/20';
+      default: return 'bg-warning/20';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold font-display">Dossiers à Analyser</h1>
-          <p className="text-muted-foreground">Validez ou renvoyez les dossiers de crédit</p>
+          <h1 className="text-2xl font-bold font-display">Comité de Crédit</h1>
+          <p className="text-muted-foreground">Validation des dossiers de crédit</p>
         </div>
-        <Badge variant="outline" className="text-lg px-4 py-2 text-info border-info">
-          {dossiers.length} dossiers en attente
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-lg px-4 py-2 text-warning border-warning">
+            {transmittedDossiers.length} en attente
+          </Badge>
+          <Badge variant="outline" className="text-lg px-4 py-2 text-success border-success">
+            {approvedDossiers.length} approuvés
+          </Badge>
+        </div>
       </div>
 
-      {/* Dossiers List */}
-      <div className="grid gap-4">
-        {dossiers.map(dossier => {
-          const clientInfo = getClientInfo(dossier.clientId);
-          const manager = getManager(dossier.gestionnaireId);
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="glass-card">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase">En attente</p>
+                <p className="text-2xl font-bold text-warning">{transmittedDossiers.length}</p>
+              </div>
+              <Clock className="w-8 h-8 text-warning" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="glass-card">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase">Approuvés</p>
+                <p className="text-2xl font-bold text-success">{approvedDossiers.length}</p>
+              </div>
+              <CheckCircle2 className="w-8 h-8 text-success" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="glass-card">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase">Rejetés</p>
+                <p className="text-2xl font-bold text-destructive">{rejectedDossiers.length}</p>
+              </div>
+              <XCircle className="w-8 h-8 text-destructive" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="glass-card">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase">Taux approbation</p>
+                <p className="text-2xl font-bold text-primary">
+                  {approvedDossiers.length + rejectedDossiers.length > 0 
+                    ? Math.round((approvedDossiers.length / (approvedDossiers.length + rejectedDossiers.length)) * 100)
+                    : 0}%
+                </p>
+              </div>
+              <BarChart3 className="w-8 h-8 text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          return (
-            <Card key={dossier.id} className="glass-card">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <Avatar className="w-14 h-14 border border-border">
-                    <AvatarImage src={clientInfo?.avatar} />
-                    <AvatarFallback className="bg-muted">
-                      {clientInfo?.type !== 'entreprise' 
-                        ? getInitials(clientInfo?.name?.split(' ')[1] || '', clientInfo?.name?.split(' ')[0] || '')
-                        : 'E'}
-                    </AvatarFallback>
-                  </Avatar>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Rechercher un dossier..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="pl-10 input-dark"
+        />
+      </div>
 
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-lg">{clientInfo?.name}</h3>
-                      <Badge variant="outline">{dossier.type}</Badge>
-                      <Badge className="bg-warning/20 text-warning">En attente</Badge>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Montant</span>
-                        <p className="font-semibold text-primary number-format">{formatXAF(dossier.montant)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Durée</span>
-                        <p className="font-medium">{dossier.duree} mois</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Mensualité</span>
-                        <p className="font-medium number-format">{formatXAF(dossier.mensualite)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Gestionnaire</span>
-                        <p className="font-medium">{manager?.prenom} {manager?.nom}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Date dépôt</span>
-                        <p className="font-medium">{dossier.dateDepot}</p>
-                      </div>
-                    </div>
-                  </div>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="bg-muted/50">
+          <TabsTrigger value="transmis" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Clock className="w-4 h-4 mr-2" />
+            À traiter ({transmittedDossiers.length})
+          </TabsTrigger>
+          <TabsTrigger value="approuves" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <CheckCircle2 className="w-4 h-4 mr-2" />
+            Approuvés ({approvedDossiers.length})
+          </TabsTrigger>
+          <TabsTrigger value="rejetes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <XCircle className="w-4 h-4 mr-2" />
+            Rejetés ({rejectedDossiers.length})
+          </TabsTrigger>
+        </TabsList>
 
-                  <div className="flex flex-col gap-2">
-                    {/* View Details */}
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Eye className="w-4 h-4 mr-2" />
-                          Voir détails
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-primary" />
-                            Analyse du Dossier - {clientInfo?.name}
-                          </DialogTitle>
-                        </DialogHeader>
-                        
-                        <Tabs defaultValue="client" className="mt-4">
-                          <TabsList className="w-full">
-                            <TabsTrigger value="client" className="flex-1">Client</TabsTrigger>
-                            <TabsTrigger value="credit" className="flex-1">Crédit</TabsTrigger>
-                            <TabsTrigger value="garanties" className="flex-1">Garanties</TabsTrigger>
-                            <TabsTrigger value="risques" className="flex-1">Risques</TabsTrigger>
-                          </TabsList>
-                          
-                          <TabsContent value="client" className="space-y-4 mt-4">
-                            <div className="flex items-center gap-4 p-4 rounded-lg bg-muted/50">
-                              <Avatar className="w-16 h-16 border-2 border-primary/30">
-                                <AvatarImage src={clientInfo?.avatar} />
-                                <AvatarFallback className="bg-primary/20 text-primary">
-                                  {clientInfo?.name?.charAt(0)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <h3 className="font-semibold text-lg">{clientInfo?.name}</h3>
-                                <Badge variant="outline" className="mt-1">
-                                  {clientInfo?.type === 'salarie' ? 'Salarié' : clientInfo?.type === 'independant' ? 'Indépendant' : 'Entreprise'}
-                                </Badge>
-                              </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                              <Card className="bg-muted/30">
-                                <CardContent className="p-4">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Phone className="w-4 h-4 text-primary" />
-                                    <span className="text-sm text-muted-foreground">Téléphone</span>
-                                  </div>
-                                  <p className="font-medium">{clientInfo?.telephone}</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="bg-muted/30">
-                                <CardContent className="p-4">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Mail className="w-4 h-4 text-primary" />
-                                    <span className="text-sm text-muted-foreground">Email</span>
-                                  </div>
-                                  <p className="font-medium">{clientInfo?.email}</p>
-                                </CardContent>
-                              </Card>
-                              {clientInfo?.type === 'salarie' && (
-                                <>
-                                  <Card className="bg-muted/30">
-                                    <CardContent className="p-4">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Building2 className="w-4 h-4 text-primary" />
-                                        <span className="text-sm text-muted-foreground">Employeur</span>
-                                      </div>
-                                      <p className="font-medium">{clientInfo.details.employeur}</p>
-                                    </CardContent>
-                                  </Card>
-                                  <Card className="bg-muted/30">
-                                    <CardContent className="p-4">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <TrendingUp className="w-4 h-4 text-primary" />
-                                        <span className="text-sm text-muted-foreground">Revenu Net</span>
-                                      </div>
-                                      <p className="font-semibold text-primary number-format">{formatXAF(clientInfo.details.revenu)}</p>
-                                    </CardContent>
-                                  </Card>
-                                </>
-                              )}
-                              {clientInfo?.type === 'independant' && (
-                                <>
-                                  <Card className="bg-muted/30">
-                                    <CardContent className="p-4">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Briefcase className="w-4 h-4 text-primary" />
-                                        <span className="text-sm text-muted-foreground">Activité</span>
-                                      </div>
-                                      <p className="font-medium">{clientInfo.details.activite}</p>
-                                    </CardContent>
-                                  </Card>
-                                  <Card className="bg-muted/30">
-                                    <CardContent className="p-4">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <TrendingUp className="w-4 h-4 text-primary" />
-                                        <span className="text-sm text-muted-foreground">Chiffre d'Affaires</span>
-                                      </div>
-                                      <p className="font-semibold text-primary number-format">{formatXAF(clientInfo.details.ca)}</p>
-                                    </CardContent>
-                                  </Card>
-                                </>
-                              )}
-                            </div>
-                          </TabsContent>
-                          
-                          <TabsContent value="credit" className="space-y-4 mt-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <Card className="bg-primary/10 border-primary/30">
-                                <CardContent className="p-4 text-center">
-                                  <p className="text-2xl font-bold text-primary number-format">{formatXAF(dossier.montant)}</p>
-                                  <p className="text-sm text-muted-foreground">Montant demandé</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="bg-muted/30">
-                                <CardContent className="p-4 text-center">
-                                  <p className="text-2xl font-bold">{dossier.duree} mois</p>
-                                  <p className="text-sm text-muted-foreground">Durée</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="bg-muted/30">
-                                <CardContent className="p-4 text-center">
-                                  <p className="text-2xl font-bold">{dossier.taux}%</p>
-                                  <p className="text-sm text-muted-foreground">Taux d'intérêt</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="bg-muted/30">
-                                <CardContent className="p-4 text-center">
-                                  <p className="text-2xl font-bold number-format">{formatXAF(dossier.mensualite)}</p>
-                                  <p className="text-sm text-muted-foreground">Mensualité</p>
-                                </CardContent>
-                              </Card>
-                            </div>
-                            
-                            <Card className="bg-muted/30">
-                              <CardContent className="p-4">
-                                <p className="text-sm text-muted-foreground mb-1">Type de crédit</p>
-                                <p className="font-semibold">{dossier.type}</p>
-                              </CardContent>
-                            </Card>
-                          </TabsContent>
-                          
-                          <TabsContent value="garanties" className="mt-4">
-                            <Card className="bg-muted/30">
-                              <CardContent className="p-4">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <Shield className="w-5 h-5 text-primary" />
-                                  <span className="font-semibold">Garantie proposée</span>
-                                </div>
-                                <p className="text-muted-foreground">{dossier.garantie}</p>
-                              </CardContent>
-                            </Card>
-                            
-                            <div className="mt-4 p-4 border-2 border-dashed border-border rounded-lg text-center text-muted-foreground">
-                              <FileText className="w-8 h-8 mx-auto mb-2" />
-                              <p className="text-sm">Documents joints: Acte de caution, CNI...</p>
-                            </div>
-                          </TabsContent>
-                          
-                          <TabsContent value="risques" className="space-y-4 mt-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <Card className="bg-success/10 border-success/30">
-                                <CardContent className="p-4 text-center">
-                                  <p className="text-3xl font-bold text-success">A</p>
-                                  <p className="text-sm text-muted-foreground">Score Interne</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="bg-success/10 border-success/30">
-                                <CardContent className="p-4 text-center">
-                                  <p className="text-3xl font-bold text-success">A</p>
-                                  <p className="text-sm text-muted-foreground">Score BEAC</p>
-                                </CardContent>
-                              </Card>
-                            </div>
-                            
-                            <Card className="bg-muted/30">
-                              <CardContent className="p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-sm text-muted-foreground">Taux d'endettement</span>
-                                  <span className="font-semibold text-success">28%</span>
-                                </div>
-                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                                  <div className="h-full w-[28%] bg-success rounded-full" />
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">Seuil maximum: 33%</p>
-                              </CardContent>
-                            </Card>
-                          </TabsContent>
-                        </Tabs>
-                      </DialogContent>
-                    </Dialog>
+        {/* Dossiers à traiter */}
+        <TabsContent value="transmis" className="space-y-4">
+          {filteredDossiers.length > 0 ? (
+            <div className="grid gap-4">
+              {filteredDossiers.map(dossier => {
+                const rec = dossier.ai_recommendation as any;
+                return (
+                  <Card key={dossier.id} className="glass-card">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className={cn("w-14 h-14 rounded-full flex items-center justify-center", getDecisionBg(rec?.decision || ''))}>
+                          {rec?.decision === 'favorable' && <CheckCircle2 className="w-7 h-7 text-success" />}
+                          {rec?.decision === 'defavorable' && <XCircle className="w-7 h-7 text-destructive" />}
+                          {rec?.decision === 'reserve' && <AlertTriangle className="w-7 h-7 text-warning" />}
+                          {!rec?.decision && <Brain className="w-7 h-7 text-primary" />}
+                        </div>
 
-                    {/* Approve */}
-                    <Button 
-                      variant="gold" 
-                      size="sm"
-                      onClick={() => handleApprove(dossier.id)}
-                    >
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Approuver
-                    </Button>
-
-                    {/* Reject Dialog */}
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setSelectedDossier(dossier)}
-                        >
-                          <XCircle className="w-4 h-4 mr-2" />
-                          Renvoyer
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <AlertTriangle className="w-5 h-5 text-warning" />
-                            Renvoyer le dossier
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 mt-4">
-                          <p className="text-sm text-muted-foreground">
-                            Ce dossier sera renvoyé à <strong>{manager?.prenom} {manager?.nom}</strong> pour correction.
-                          </p>
-                          
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Motif du renvoi *</label>
-                            <Select value={motifRenvoi} onValueChange={setMotifRenvoi}>
-                              <SelectTrigger className="input-dark">
-                                <SelectValue placeholder="Sélectionner un motif" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {motifsRenvoi.map(m => (
-                                  <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-1">
+                            <h3 className="font-semibold text-lg">Dossier #{dossier.id.slice(0, 8)}</h3>
+                            <Badge variant="outline">Client: {dossier.client_id?.slice(0, 8)}</Badge>
+                            {rec?.decision && (
+                              <Badge className={cn("capitalize", getDecisionBg(rec.decision), getDecisionColor(rec.decision))}>
+                                IA: {rec.decision}
+                              </Badge>
+                            )}
+                            <Badge variant="outline">{dossier.classe_risque || 'N/A'}</Badge>
                           </div>
-
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Détails / Instructions</label>
-                            <Textarea
-                              value={detailsRenvoi}
-                              onChange={(e) => setDetailsRenvoi(e.target.value)}
-                              placeholder="Précisez les éléments à corriger ou à fournir..."
-                              className="input-dark min-h-24"
-                            />
-                          </div>
-
-                          <div className="flex gap-2">
-                            <DialogClose asChild>
-                              <Button variant="outline" className="flex-1">
-                                Annuler
-                              </Button>
-                            </DialogClose>
-                            <Button 
-                              variant="destructive" 
-                              className="flex-1"
-                              onClick={handleReject}
-                              disabled={!motifRenvoi}
-                            >
-                              Confirmer le renvoi
-                            </Button>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span className="font-semibold text-primary number-format">
+                              {formatXAF(dossier.montant)}
+                            </span>
+                            <span>{dossier.duree} mois</span>
+                            <span>Score: <strong className="text-foreground">{dossier.score_global || 0}/100</strong></span>
                           </div>
                         </div>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" onClick={() => handleViewDetail(dossier)}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            Analyser
+                          </Button>
+                          <Button variant="gold" onClick={() => handleApprove(dossier.id)}>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Approuver
+                          </Button>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setSelectedDossier(dossier)}
+                              >
+                                <XCircle className="w-4 h-4 mr-2" />
+                                Rejeter
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2">
+                                  <AlertTriangle className="w-5 h-5 text-warning" />
+                                  Rejeter le dossier
+                                </DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 mt-4">
+                                <p className="text-sm text-muted-foreground">
+                                  Ce dossier sera renvoyé au gestionnaire pour correction.
+                                </p>
+                                
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium">Motif du rejet *</label>
+                                  <Select value={motifRenvoi} onValueChange={setMotifRenvoi}>
+                                    <SelectTrigger className="input-dark">
+                                      <SelectValue placeholder="Sélectionner un motif" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {motifsRenvoi.map(m => (
+                                        <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium">Détails / Instructions</label>
+                                  <Textarea
+                                    value={detailsRenvoi}
+                                    onChange={(e) => setDetailsRenvoi(e.target.value)}
+                                    placeholder="Précisez les éléments à corriger..."
+                                    className="input-dark min-h-24"
+                                  />
+                                </div>
+
+                                <div className="flex gap-2">
+                                  <DialogClose asChild>
+                                    <Button variant="outline" className="flex-1">Annuler</Button>
+                                  </DialogClose>
+                                  <Button 
+                                    variant="destructive" 
+                                    className="flex-1"
+                                    onClick={handleReject}
+                                    disabled={!motifRenvoi}
+                                  >
+                                    Confirmer le rejet
+                                  </Button>
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-12 text-center">
+                <CheckCircle2 className="w-16 h-16 mx-auto mb-4 text-success" />
+                <h3 className="text-lg font-semibold mb-2">Aucun dossier en attente</h3>
+                <p className="text-muted-foreground">Tous les dossiers ont été traités</p>
               </CardContent>
             </Card>
-          );
-        })}
+          )}
+        </TabsContent>
 
-        {dossiers.length === 0 && (
-          <Card className="glass-card">
-            <CardContent className="p-12 text-center">
-              <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-success" />
-              <p className="text-lg font-semibold">Tous les dossiers ont été traités</p>
-              <p className="text-muted-foreground">Aucun dossier en attente de validation</p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+        {/* Dossiers approuvés */}
+        <TabsContent value="approuves" className="space-y-4">
+          {approvedDossiers.length > 0 ? (
+            <div className="grid gap-4">
+              {approvedDossiers.map(dossier => (
+                <Card key={dossier.id} className="glass-card border-success/30">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-full flex items-center justify-center bg-success/20">
+                        <CheckCircle2 className="w-7 h-7 text-success" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-semibold text-lg">Dossier #{dossier.id.slice(0, 8)}</h3>
+                          <Badge className="bg-success/20 text-success">Approuvé</Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="font-semibold text-primary number-format">
+                            {formatXAF(dossier.montant)}
+                          </span>
+                          <span>{dossier.duree} mois</span>
+                        </div>
+                      </div>
+                      <Button variant="outline" onClick={() => handleViewDetail(dossier)}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Voir
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-12 text-center">
+                <FolderKanban className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">Aucun dossier approuvé</h3>
+                <p className="text-muted-foreground">Les dossiers approuvés apparaîtront ici</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Dossiers rejetés */}
+        <TabsContent value="rejetes" className="space-y-4">
+          {rejectedDossiers.length > 0 ? (
+            <div className="grid gap-4">
+              {rejectedDossiers.map(dossier => (
+                <Card key={dossier.id} className="glass-card border-destructive/30">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-full flex items-center justify-center bg-destructive/20">
+                        <XCircle className="w-7 h-7 text-destructive" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-semibold text-lg">Dossier #{dossier.id.slice(0, 8)}</h3>
+                          <Badge className="bg-destructive/20 text-destructive">Rejeté</Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="font-semibold text-primary number-format">
+                            {formatXAF(dossier.montant)}
+                          </span>
+                          <span>{dossier.duree} mois</span>
+                        </div>
+                      </div>
+                      <Button variant="outline" onClick={() => handleViewDetail(dossier)}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Voir
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-12 text-center">
+                <FolderKanban className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">Aucun dossier rejeté</h3>
+                <p className="text-muted-foreground">Les dossiers rejetés apparaîtront ici</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Detail Dialog */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-primary" />
+              Analyse COI - Dossier #{selectedDossier?.id?.slice(0, 8)}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedDossier && selectedDossier.analysis_data && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <COIScoreCard 
+                  score={selectedDossier.score_global || 0} 
+                  classeRisque={selectedDossier.classe_risque || 'N/A'}
+                  recommendation={(selectedDossier.ai_recommendation as any)?.decision}
+                />
+                <COIRadarChart scores={(selectedDossier.analysis_data as any)?.scores || {}} />
+              </div>
+              
+              <COIIndicators 
+                indicateurs={((selectedDossier.analysis_data as any)?.indicateurs || []).map((ind: any) => ({
+                  ...ind,
+                  seuil: '-'
+                }))} 
+                conformiteCobac={(selectedDossier.analysis_data as any)?.conformite_cobac}
+              />
+              
+              <COIAnalysisNote analysis={selectedDossier.analysis_data} />
+              
+              {selectedDossier.gestionnaire_remarks && (
+                <Card className="glass-card">
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-primary" />
+                      Remarques du gestionnaire
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">{selectedDossier.gestionnaire_remarks}</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+          
+          {selectedDossier && !selectedDossier.analysis_data && (
+            <div className="py-12 text-center">
+              <Brain className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-muted-foreground">Aucune analyse IA disponible pour ce dossier</p>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+              Fermer
+            </Button>
+            {selectedDossier?.status === 'transmis' && (
+              <>
+                <Button variant="gold" onClick={() => {
+                  handleApprove(selectedDossier.id);
+                  setShowDetailDialog(false);
+                }}>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Approuver
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useDossiers } from '@/hooks/useDossiers';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
@@ -564,7 +565,7 @@ export default function CockpitTraitement() {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const { addNotification } = useNotifications();
-  
+  const { createDossier, loading: dossierLoading } = useDossiers();
   const client = clients.find(c => c.id === clientId);
   const [showGaranties, setShowGaranties] = useState(false);
   const [showKycDialog, setShowKycDialog] = useState(false);
@@ -744,18 +745,43 @@ export default function CockpitTraitement() {
     });
   };
 
-  const handleEnregistrer = () => {
-    addNotification({
-      title: "Dossier enregistré",
-      message: `Le dossier a été ajouté au panier`,
-      type: "success",
-      link: "/dashboard/panier"
-    });
-    toast({
-      title: "Dossier enregistré",
-      description: "Le dossier a été ajouté au panier",
-    });
-    navigate('/dashboard/panier');
+  const handleEnregistrer = async () => {
+    try {
+      // Create dossier in database
+      await createDossier({
+        client_id: clientId || 'unknown',
+        montant: montant,
+        duree: dureeEnMois,
+        differe: differeEnMois,
+        credit_type_id: creditForm.typeCredit || null,
+        status: 'panier',
+        garanties: garantiesSaved as any,
+        kyc_data: client ? {
+          type: client.type,
+          nom: (client as any).nom || (client as any).companyId,
+          prenom: (client as any).prenom,
+        } : {} as any
+      });
+
+      addNotification({
+        title: "Dossier enregistré",
+        message: `Le dossier a été ajouté au panier`,
+        type: "success",
+        link: "/dashboard/panier"
+      });
+      toast({
+        title: "Dossier enregistré",
+        description: "Le dossier a été ajouté au panier et sera analysé par l'IA",
+      });
+      navigate('/dashboard/panier');
+    } catch (error) {
+      console.error('Error creating dossier:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de créer le dossier",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleTelechargerPDF = () => {
